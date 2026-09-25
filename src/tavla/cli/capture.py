@@ -6,7 +6,7 @@ from typing import Annotated
 
 import typer
 
-from tavla.cli.common import complete_project, handles_errors, state
+from tavla.cli.common import ContentDirOpt, complete_project, handles_errors, state
 from tavla.core import ops
 
 
@@ -16,9 +16,10 @@ def capture(
     text: Annotated[
         list[str], typer.Argument(help="What to capture. Quotes optional: words are joined.")
     ],
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Append a thought, idea or todo to the inbox for later triage."""
-    line = ops.capture(state(ctx).content(), " ".join(text))
+    line = ops.capture(state(ctx, content_dir=content_dir).content(), " ".join(text))
     typer.echo(f"Captured: {line}")
 
 
@@ -27,9 +28,10 @@ def log(
     ctx: typer.Context,
     project_id: Annotated[str, typer.Argument(metavar="PROJECT", autocompletion=complete_project)],
     text: Annotated[list[str], typer.Argument(help="Log entry. Quotes optional.")],
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Append a timestamped progress note to a project's log.md."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     project = content.project(project_id)
     entry = ops.append_log(content, project, " ".join(text))
     typer.echo(f"Logged to {project.id}: {entry.text}")

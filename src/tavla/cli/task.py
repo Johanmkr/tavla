@@ -7,6 +7,7 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import (
+    ContentDirOpt,
     JsonOpt,
     complete_project,
     complete_task,
@@ -46,9 +47,10 @@ def add(
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the title).")
     ] = None,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Create a new task in a project and commit it."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     project = content.project(project_id)
     task = ops.add_task(
         content,
@@ -67,9 +69,10 @@ def add(
 def edit(
     ctx: typer.Context,
     task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Open the task's markdown file in $EDITOR, then validate and commit."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
     session = ops.EditSession(task.path)
     edited = edit_until_valid(session, lambda: ops.finish_task_edit(content, task, session))
@@ -81,9 +84,10 @@ def edit(
 def done(
     ctx: typer.Context,
     task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Mark a task done (sets status and updated; the body is left untouched)."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
     if ops.complete_task(content, task) is None:
         typer.echo(f"{task.id} is already done.")
@@ -125,9 +129,10 @@ def list_(
     ] = None,
     all_: Annotated[bool, typer.Option("--all", "-a", help="Include done tasks.")] = False,
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """List tasks, highest priority first. Done tasks are hidden unless asked for."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     project = content.project(project_id) if project_id else None
     tasks = content.tasks(project)
@@ -158,9 +163,10 @@ def show(
     ctx: typer.Context,
     task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Show a task's metadata and its full markdown body."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     task = content.task(task_id)
 

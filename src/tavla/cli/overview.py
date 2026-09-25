@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import (
+    ContentDirOpt,
     JsonOpt,
     complete_project,
     emit_json,
@@ -60,9 +61,10 @@ def next_(
     ] = None,
     limit: Annotated[int, typer.Option("--limit", "-n", min=0, help="Max tasks (0 = all).")] = 10,
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """What to work on next: open tasks across active projects, most important first."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     project = content.project(project_id) if project_id else None
     tasks = queries.next_tasks(content, project=project, min_priority=priority)
@@ -106,9 +108,10 @@ def status(
         typer.Option("--deadline-days", min=0, help="Show deliverable deadlines this far ahead."),
     ] = queries.DEFAULT_DEADLINE_DAYS,
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Health check: stale projects, blocked tasks, and what's coming due."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     report = queries.status(content, stale_days=stale_days, deadline_days=deadline_days)
 

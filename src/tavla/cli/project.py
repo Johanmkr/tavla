@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import (
+    ContentDirOpt,
     JsonOpt,
     complete_project,
     edit_until_valid,
@@ -37,9 +38,10 @@ def add(
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the name).")
     ] = None,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Create a new project and commit it."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     project = ops.add_project(content, name, id=id_, priority=priority, tags=ops.parse_tags(tags))
     typer.echo(f"Added project {project.id}")
 
@@ -49,9 +51,10 @@ def add(
 def edit(
     ctx: typer.Context,
     project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Open the project's project.yaml in $EDITOR, then validate and commit."""
-    content = state(ctx).content()
+    content = state(ctx, content_dir=content_dir).content()
     project = content.project(project_id)
     session = ops.EditSession(project.path / PROJECT_FILE)
     edited = edit_until_valid(session, lambda: ops.finish_project_edit(content, project, session))
@@ -67,9 +70,10 @@ def list_(
     ] = None,
     all_: Annotated[bool, typer.Option("--all", "-a", help="Include archived projects.")] = False,
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """List projects (subprojects indented under their parent)."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     projects = content.projects()
     if status is not None:
@@ -101,9 +105,10 @@ def show(
     ctx: typer.Context,
     project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
     json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
 ) -> None:
     """Show a project's metadata, subprojects, tasks, deliverables and recent log."""
-    st = state(ctx, json_out=json_out)
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     project = content.project(project_id)
     tasks = content.tasks(project)

@@ -38,14 +38,19 @@ class State:
         return Content.open(self.content_dir)
 
 
-def state(ctx: typer.Context, *, json_out: bool = False) -> State:
-    """Global state; a per-command ``--json`` flag is folded into it."""
+def state(ctx: typer.Context, *, json_out: bool = False, content_dir: Path | None = None) -> State:
+    """Global state, with per-command ``--json`` / ``--content-dir`` folded in
+    (so they work both before and after the subcommand)."""
     st = ctx.find_object(State) or ctx.ensure_object(State)
     st.json = st.json or json_out
+    if content_dir is not None:
+        st.content_dir_flag = content_dir
     return st
 
 
 JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable output.")]
+# Hidden: documented once as a global option, but accepted after any command too.
+ContentDirOpt = Annotated[Path | None, typer.Option("--content-dir", hidden=True)]
 
 
 P = ParamSpec("P")
