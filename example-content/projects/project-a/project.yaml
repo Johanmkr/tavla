@@ -1,0 +1,8 @@
+id: project-a
+title: "Adaptive sampling for X"
+status: active
+priority: high
+tags: [bayesian, sampling]
+related: [project-b]
+repo_path: ~/code/project-a
+created: 2026-01-10

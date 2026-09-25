@@ -2,42 +2,23 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
 from tavla import __version__, config
+from tavla.cli import project, task
+from tavla.cli.common import State, handles_errors, state
 from tavla.core import bootstrap
-from tavla.core.errors import TavlaError
 
 app = typer.Typer(
     name="tavla",
     help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
     no_args_is_help=True,
 )
-
-
-@dataclass
-class State:
-    content_dir_flag: Path | None = None
-    json: bool = False
-    yes: bool = False
-    verbose: bool = False
-
-    @property
-    def content_dir(self) -> Path:
-        return config.resolve_content_dir(self.content_dir_flag)
-
-
-def _state(ctx: typer.Context) -> State:
-    return ctx.ensure_object(State)
-
-
-def _fail(err: TavlaError) -> typer.Exit:
-    typer.secho(f"error: {err}", fg=typer.colors.RED, err=True)
-    return typer.Exit(err.exit_code)
+app.add_typer(project.app, name="project")
+app.add_typer(task.app, name="task")
 
 
 def _version_callback(value: bool) -> None:
@@ -67,6 +48,7 @@ def main(
 
 
 @app.command()
+@handles_errors
 def init(
     ctx: typer.Context,
     content_dir: Annotated[
@@ -75,15 +57,12 @@ def init(
     ] = None,
 ) -> None:
     """Bootstrap a content dir, git-init it, and write a default config."""
-    state = _state(ctx)
+    st = state(ctx)
     if content_dir is not None:
-        state.content_dir_flag = content_dir
-    try:
-        result = bootstrap.init_content_dir(state.content_dir)
-    except TavlaError as e:
-        raise _fail(e) from e
+        st.content_dir_flag = content_dir
+    result = bootstrap.init_content_dir(st.content_dir)
     typer.echo(f"Initialized tavla content repo at {result.content_dir}")
     if result.config_written:
         typer.echo(f"Wrote config to {result.config_written}")
-    elif state.verbose:
+    elif st.verbose:
         typer.echo(f"Existing config left untouched: {config.config_path()}")

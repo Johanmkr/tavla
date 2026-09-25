@@ -3,7 +3,7 @@
 A personal research operations tool: multi-project progress tracking, tasks,
 deliverables and reading material — CLI-first, plain text, git-native.
 
-> Status: early development (milestone 1 — scaffolding + `tavla init`).
+> Status: early development (milestone 2 — read path: `project`/`task` `list`/`show`).
 
 ## Install (development)
 
@@ -16,7 +16,15 @@ uv venv && uv pip install -e '.[dev]'
 ```sh
 tavla init                       # creates ~/.local/share/tavla/ as a git repo
 tavla init --content-dir ~/notes/tavla
+
+# Try the read commands against the bundled demo tree:
+tavla --content-dir example-content project list
+tavla --content-dir example-content task list
+tavla --content-dir example-content task show write-i   # unique id prefixes work
+tavla --content-dir example-content project show project-a --json
 ```
+
+Enable id tab-completion with `tavla --install-completion`.
 
 ## Where your data lives
 

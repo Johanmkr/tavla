@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+from pathlib import Path
+
 import pytest
 
 
@@ -20,3 +23,19 @@ def isolated_env(tmp_path, monkeypatch):
         monkeypatch.setenv(f"GIT_{var}_NAME", "tavla-test")
         monkeypatch.setenv(f"GIT_{var}_EMAIL", "test@example.invalid")
     return home
+
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+@pytest.fixture
+def basic_content() -> Path:
+    """Read-only sample content tree. Copy it (see ``content_copy``) before writing."""
+    return FIXTURES / "basic"
+
+
+@pytest.fixture
+def content_copy(tmp_path, basic_content) -> Path:
+    dest = tmp_path / "content"
+    shutil.copytree(basic_content, dest)
+    return dest
