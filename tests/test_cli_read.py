@@ -119,3 +119,28 @@ def test_invalid_file_is_reported_with_path(content_copy):
     result = runner.invoke(app, ["--content-dir", str(content_copy), "task", "list"])
     assert result.exit_code == EXIT_INVALID
     assert "bad.md" in result.output
+
+
+def test_content_dir_accepted_after_command(basic_content):
+    for args in (
+        ["task", "list"],
+        ["project", "show", "project-a"],
+        ["next"],
+        ["status"],
+    ):
+        result = runner.invoke(app, [*args, "--content-dir", str(basic_content)])
+        assert result.exit_code == 0, (args, result.output)
+
+
+def test_content_dir_after_command_overrides_global(basic_content, tmp_path):
+    result = runner.invoke(
+        app,
+        ["--content-dir", str(tmp_path), "task", "list", "--content-dir", str(basic_content)],
+    )
+    assert result.exit_code == 0, result.output
+    assert "write-intro" in result.output
+
+
+def test_content_dir_option_is_hidden_on_subcommands():
+    result = runner.invoke(app, ["task", "list", "--help"])
+    assert "--content-dir" not in result.output

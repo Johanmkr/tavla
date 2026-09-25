@@ -81,6 +81,22 @@ def edit(
 
 @app.command()
 @handles_errors
+def start(
+    ctx: typer.Context,
+    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Mark a task as doing (from todo, blocked, or done)."""
+    content = state(ctx, content_dir=content_dir).content()
+    task = content.task(task_id)
+    if ops.start_task(content, task) is None:
+        typer.echo(f"{task.id} is already in progress.")
+        return
+    typer.echo(f"Started: {task.id} ({task.title}) — was {task.status}")
+
+
+@app.command()
+@handles_errors
 def done(
     ctx: typer.Context,
     task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],

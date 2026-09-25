@@ -350,3 +350,7 @@ def set_task_status(
 
 def complete_task(content: Content, task: Task, *, today: dt.date | None = None) -> Task | None:
     return set_task_status(content, task, TaskStatus.DONE, verb="done", today=today)
+
+
+def start_task(content: Content, task: Task, *, today: dt.date | None = None) -> Task | None:
+    return set_task_status(content, task, TaskStatus.DOING, verb="start", today=today)

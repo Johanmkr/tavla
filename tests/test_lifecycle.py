@@ -217,3 +217,31 @@ def test_tier1_end_to_end(tmp_path, git):
         "init: content repo",
     ]
     assert git(content, "status", "--porcelain") == ""
+
+
+# --- task start ------------------------------------------------------------------
+
+
+def test_start_task(content, git):
+    started = ops.start_task(content, content.task("write-methods"), today=TODAY)
+    assert (started.status, started.updated) == (TaskStatus.DOING, TODAY)
+    assert _head(git, content.root) == "task: start write-methods"
+    assert _clean(git, content.root)
+
+
+def test_start_already_doing_is_noop(content, git):
+    assert ops.start_task(content, content.task("write-intro"), today=TODAY) is None
+    assert _head(git, content.root) == "initial"
+
+
+def test_cli_task_start(run, git_content, git):
+    result = run("task", "start", "write-m")
+    assert result.exit_code == 0, result.output
+    assert "Started: write-methods (Write methods section) — was todo" in result.output
+    assert "already in progress" in run("task", "start", "write-m").output
+
+
+def test_cli_start_reopens_done_task(run, git_content):
+    result = run("task", "start", "setup-env")
+    assert "was done" in result.output
+    assert Content.open(git_content).task("setup-env").status == TaskStatus.DOING

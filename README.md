@@ -45,7 +45,8 @@ tavla task add "Run baseline experiments" -p adap --priority high
 #  -> Added task run-baseline-experiments to adaptive-sampling
 
 tavla next                          # what to work on, across all active projects
-tavla task edit intro               # opens $EDITOR: add subtasks, notes, set status
+tavla task start intro              # todo -> doing
+tavla task edit intro               # opens $EDITOR: add subtasks, notes, context
 tavla log adap "baseline converges on the toy model"
 tavla capture look into parallel tempering    # quick thought -> inbox
 tavla task done intro
@@ -74,13 +75,14 @@ tavla lists the candidates instead of guessing.
 | `tavla task list [-p PROJECT] [--status S] [--all]` | List tasks (done hidden unless `--all`) |
 | `tavla task show ID` | Metadata plus the full task file |
 | `tavla task edit ID` | Edit the task file in `$EDITOR` |
+| `tavla task start ID` | Mark a task `doing` (also reopens a `done` task) |
 | `tavla task done ID` | Mark a task done |
 
 `tavla COMMAND --help` shows every option.
 
-**Global options go before the command:** `tavla --content-dir DIR task list`,
-not `tavla task list --content-dir DIR`. They are `--content-dir`, `--json`,
-`-y/--yes` and `-v/--verbose`. (`--json` is also accepted after any read command.)
+Global options: `--content-dir PATH`, `--json`, `-y/--yes`, `-v/--verbose`.
+`--content-dir` and `--json` work before or after the command
+(`tavla --json next` and `tavla next --json` are the same).
 
 ### Values
 
@@ -91,8 +93,9 @@ not `tavla task list --content-dir DIR`. They are `--content-dir`, `--json`,
 | task status | `todo` (default), `doing`, `blocked`, `done` |
 | dates (`--due`) | `2026-10-01`, `today`, `tomorrow`, `+3d`, `+2w`, `fri`/`friday` (the next one) |
 
-To change a task's status other than to `done` — e.g. `todo` → `doing` or
-`blocked` — run `tavla task edit ID` and change the `status:` line.
+`task start` and `task done` cover the everyday status changes. For anything
+else (e.g. marking a task `blocked`), run `tavla task edit ID` and change the
+`status:` line.
 
 ### How `next` and `status` decide
 
