@@ -3,7 +3,7 @@
 A personal research operations tool: multi-project progress tracking, tasks,
 deliverables and reading material — CLI-first, plain text, git-native.
 
-> Status: early development (milestone 3 — create/edit projects and tasks, auto-committed).
+> Status: early development (milestone 4 — `tavla next` / `tavla status` cross-project views).
 
 ## Install (development)
 
@@ -21,6 +21,8 @@ tavla project add "Adaptive sampling" --priority high --tags bayes,mcmc
 tavla task add "Write introduction" --project adap --due fri
 tavla task edit write-intro       # opens $EDITOR; validated and committed on save
 tavla task list
+tavla next                        # what to work on, across all active projects
+tavla status                      # stale projects, blocked tasks, upcoming deadlines
 
 # Try the read commands against the bundled demo tree:
 tavla --content-dir example-content project list
