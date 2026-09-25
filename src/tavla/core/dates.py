@@ -13,6 +13,11 @@ def local_today() -> dt.date:
     return dt.datetime.now().astimezone().date()
 
 
+def local_now() -> dt.datetime:
+    """Current local time, minute precision, without tzinfo (as written to log.md)."""
+    return dt.datetime.now().astimezone().replace(second=0, microsecond=0, tzinfo=None)
+
+
 _WEEKDAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _RELATIVE_RE = re.compile(r"^\+(\d+)([dw])$")
 

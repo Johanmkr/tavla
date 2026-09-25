@@ -3,7 +3,7 @@
 A personal research operations tool: multi-project progress tracking, tasks,
 deliverables and reading material — CLI-first, plain text, git-native.
 
-> Status: early development (milestone 4 — `tavla next` / `tavla status` cross-project views).
+> Status: Tier 1 complete (milestone 5) — capture, log, projects, tasks, `next`, `status`.
 
 ## Install (development)
 
@@ -23,6 +23,9 @@ tavla task edit write-intro       # opens $EDITOR; validated and committed on sa
 tavla task list
 tavla next                        # what to work on, across all active projects
 tavla status                      # stale projects, blocked tasks, upcoming deadlines
+tavla capture try parallel tempering   # quick inbox capture, quotes optional
+tavla log adap "sampler converges"     # timestamped project log entry
+tavla task done write-intro
 
 # Try the read commands against the bundled demo tree:
 tavla --content-dir example-content project list

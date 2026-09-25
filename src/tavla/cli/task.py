@@ -76,6 +76,28 @@ def edit(
     typer.echo("No changes." if edited is None else f"Saved task {edited.id}")
 
 
+@app.command()
+@handles_errors
+def done(
+    ctx: typer.Context,
+    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+) -> None:
+    """Mark a task done (sets status and updated; the body is left untouched)."""
+    content = state(ctx).content()
+    task = content.task(task_id)
+    if ops.complete_task(content, task) is None:
+        typer.echo(f"{task.id} is already done.")
+        return
+    typer.echo(f"Done: {task.id} ({task.title})")
+    remaining = task.subtasks_total - task.subtasks_done
+    if remaining:
+        typer.secho(
+            f"note: {remaining} of {task.subtasks_total} subtasks were still unchecked",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
+
+
 def _sort_key(task: Task) -> tuple:
     # Priority first, then soonest due date (undated last), then id.
     return (task.priority.rank, task.due is None, task.due, task.id)

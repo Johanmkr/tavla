@@ -16,13 +16,13 @@ from typing import Any
 
 import yaml
 
-from tavla.core import bootstrap, git_sync
-from tavla.core.dates import local_today
+from tavla.core import bootstrap, dates, git_sync
 from tavla.core.entities import (
     IDEAS_FILE,
     LOG_FILE,
     PROJECT_FILE,
     TASKS_DIR,
+    LogEntry,
     Priority,
     Project,
     ProjectStatus,
@@ -154,7 +154,7 @@ def add_project(
                 "priority": priority.value,
                 "tags": parse_tags(tags),
                 "related": [],
-                "created": today or local_today(),
+                "created": today or dates.local_today(),
             }
         )
     )
@@ -190,7 +190,7 @@ def add_task(
     if path.exists():
         raise ValidationError(f"file already exists: {path}")
 
-    today = today or local_today()
+    today = today or dates.local_today()
     fields: dict[str, Any] = {
         "id": task_id,
         "project": project.id,
@@ -249,7 +249,7 @@ def finish_task_edit(
     content.refresh()
     _check_unique(content, edited.id, task.path)
 
-    today = today or local_today()
+    today = today or dates.local_today()
     if edited.updated == task.updated and edited.updated != today:
         task.path.write_text(set_frontmatter_key(task.path.read_text(), "updated", today))
 
@@ -275,3 +275,78 @@ def finish_project_edit(content: Content, project: Project, session: EditSession
     )
     content.refresh()
     return edited
+
+
+# --- append-only capture ------------------------------------------------------
+
+COMMIT_SUMMARY_LEN = 50
+
+
+def _one_line(text: str, what: str) -> str:
+    line = " ".join(text.split())
+    if not line:
+        raise ValidationError(f"{what} must not be empty")
+    return line
+
+
+def _summary(text: str) -> str:
+    return text if len(text) <= COMMIT_SUMMARY_LEN else text[: COMMIT_SUMMARY_LEN - 1] + "…"
+
+
+def _append_line(path: Path, line: str, header: str) -> None:
+    """Append ``line`` to ``path``, creating it with ``header`` if missing."""
+    existing = path.read_text() if path.exists() else header
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    path.write_text(f"{existing}{line}\n")
+
+
+def capture(content: Content, text: str) -> str:
+    """Append a free-form line to the global ``inbox.md``. Returns the line."""
+    git_sync.require_repo(content.root)
+    line = _one_line(text, "capture text")
+    path = content.root / bootstrap.INBOX_FILE
+    _append_line(path, f"- {line}", "# Inbox\n\n")
+    git_sync.commit(content.root, f"inbox: capture {_summary(line)}", [path])
+    return line
+
+
+def append_log(
+    content: Content, project: Project, text: str, *, now: dt.datetime | None = None
+) -> LogEntry:
+    """Append a timestamped ``- YYYY-MM-DD HH:MM: text`` line to the project's log.md."""
+    git_sync.require_repo(content.root)
+    line = _one_line(text, "log text")
+    now = now or dates.local_now()
+    path = project.path / LOG_FILE
+    _append_line(path, f"- {now:%Y-%m-%d %H:%M}: {line}", "# Log\n\n")
+    git_sync.commit(content.root, f"log: {project.id}: {_summary(line)}", [path])
+    return LogEntry(date=now.date(), time=now.time(), text=line)
+
+
+# --- task lifecycle -------------------------------------------------------------
+
+
+def set_task_status(
+    content: Content,
+    task: Task,
+    status: TaskStatus,
+    *,
+    verb: str | None = None,
+    today: dt.date | None = None,
+) -> Task | None:
+    """Change a task's status (and bump ``updated``), touching only those two
+    frontmatter lines. Returns None if the task already has that status."""
+    if task.status == status:
+        return None
+    git_sync.require_repo(content.root)
+    today = today or dates.local_today()
+    text = set_frontmatter_key(task.path.read_text(), "status", status.value)
+    task.path.write_text(set_frontmatter_key(text, "updated", today))
+    git_sync.commit(content.root, f"task: {verb or status.value} {task.id}", [task.path])
+    content.refresh()
+    return Task.load(task.path, task.project)
+
+
+def complete_task(content: Content, task: Task, *, today: dt.date | None = None) -> Task | None:
+    return set_task_status(content, task, TaskStatus.DONE, verb="done", today=today)

@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from tavla import __version__, config
-from tavla.cli import overview, project, task
+from tavla.cli import capture, overview, project, task
 from tavla.cli.common import State, handles_errors, state
 from tavla.core import bootstrap
 
@@ -17,6 +17,8 @@ app = typer.Typer(
     help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
     no_args_is_help=True,
 )
+app.command("capture")(capture.capture)
+app.command("log")(capture.log)
 app.command("next")(overview.next_)
 app.command("status")(overview.status)
 app.add_typer(project.app, name="project")

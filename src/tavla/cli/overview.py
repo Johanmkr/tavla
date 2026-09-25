@@ -34,6 +34,10 @@ def relative(date: dt.date | None, today: dt.date) -> str:
     return f"{date.isoformat()} ({rel})"
 
 
+def plural(n: int, noun: str) -> str:
+    return f"{n} {noun}{'' if n == 1 else 's'}"
+
+
 def _heading(text: str, count: int) -> None:
     typer.secho(f"\n{text} ({count})", bold=True)
 
@@ -115,8 +119,9 @@ def status(
     today = report.today
     typer.secho(f"tavla status — {today.isoformat()}", bold=True)
     typer.echo(
-        f"{report.active_projects} active projects · {report.open_tasks} open tasks "
-        f"({report.doing_tasks} doing) · {len(report.blocked)} blocked"
+        f"{plural(report.active_projects, 'active project')} · "
+        f"{plural(report.open_tasks, 'open task')} ({report.doing_tasks} doing) · "
+        f"{len(report.blocked)} blocked"
     )
 
     _heading(f"Stale projects (idle {stale_days}+ days)", len(report.stale))
