@@ -50,6 +50,16 @@ class Content:
         self._projects = None
         self._tasks = None
 
+    def all_ids(self) -> dict[str, list[Path]]:
+        """Every entity id in the tree (projects, tasks, deliverables, sources)
+        mapped to the file(s) defining it. Ids must be globally unique."""
+        ids: dict[str, list[Path]] = {}
+        entities = [*self.projects(), *self.tasks(), *self.deliverables(), *self.sources()]
+        for e in entities:
+            path = e.path / PROJECT_FILE if isinstance(e, Project) else e.path
+            ids.setdefault(e.id, []).append(path)
+        return ids
+
     # --- projects -----------------------------------------------------------
 
     def projects(self) -> list[Project]:

@@ -92,3 +92,49 @@ def count_subtasks(body: str, heading: str = SUBTASKS_HEADING) -> tuple[int, int
             if cb.group(1) in "xX":
                 done += 1
     return done, total
+
+
+# --- minimal, formatting-preserving edits -----------------------------------
+#
+# Rewriting a whole file through a YAML dumper would drop the user's comments
+# and reorder/reformat their fields. For tool-driven changes (bumping
+# ``updated``, flipping ``status``) we edit just the one top-level line instead.
+
+_TRAILING_COMMENT_RE = re.compile(r"^[^#\"']*?(\s+#.*)$")
+_FRONTMATTER_RE = re.compile(r"\A---[ \t]*\n(.*?\n)?---[ \t]*(?:\n|\Z)", re.DOTALL)
+
+
+def yaml_inline(value: Any) -> str:
+    """Render ``value`` as a single-line YAML scalar or flow collection."""
+    text = yaml.safe_dump(value, default_flow_style=True, allow_unicode=True, width=10**9)
+    return text.removesuffix("\n...\n").strip()
+
+
+def set_yaml_key(text: str, key: str, value: Any) -> str:
+    """Set top-level ``key`` in a YAML mapping document, touching only its line(s)."""
+    lines = text.splitlines(keepends=True)
+    key_re = re.compile(rf"^{re.escape(key)}\s*:")
+    new_line = f"{key}: {yaml_inline(value)}\n"
+    for i, line in enumerate(lines):
+        if key_re.match(line):
+            j = i + 1
+            # Swallow a block-style value (indented lines or unindented "- item" lines).
+            while j < len(lines) and lines[j].strip() and lines[j][0] in " \t-":
+                j += 1
+            # Keep a trailing "# comment" on a single-line value, unless quotes
+            # make it unclear where the value ends.
+            comment = _TRAILING_COMMENT_RE.match(line.rstrip("\n"))
+            if j == i + 1 and comment:
+                new_line = f"{new_line.rstrip()}{comment.group(1)}\n"
+            return "".join([*lines[:i], new_line, *lines[j:]])
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    return "".join([*lines, new_line])
+
+
+def set_frontmatter_key(text: str, key: str, value: Any) -> str:
+    m = _FRONTMATTER_RE.match(text)
+    if not m:
+        raise ValidationError("file has no YAML frontmatter block")
+    inner = set_yaml_key(m.group(1) or "", key, value)
+    return f"---\n{inner}---\n{text[m.end() :]}"

@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import functools
 import json
+import os
+import shlex
+import subprocess
+import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -13,7 +17,8 @@ import typer
 
 from tavla import config
 from tavla.core.entities import to_dict
-from tavla.core.errors import TavlaError
+from tavla.core.errors import TavlaError, ValidationError
+from tavla.core.ops import EditSession
 from tavla.core.queries import complete_ids
 from tavla.core.store import Content
 
@@ -111,3 +116,38 @@ def complete_task(ctx: typer.Context, incomplete: str) -> list[str]:
         return complete_ids(incomplete, _content_for_completion(ctx).tasks())
     except (TavlaError, OSError):
         return []
+
+
+# --- $EDITOR ----------------------------------------------------------------
+
+T = TypeVar("T")
+
+
+def open_in_editor(path: Path) -> None:
+    """Open ``path`` in ``$EDITOR`` (falling back to ``$VISUAL``, then ``vi``)."""
+    cmd = os.environ.get("EDITOR") or os.environ.get("VISUAL") or "vi"
+    try:
+        result = subprocess.run([*shlex.split(cmd), str(path)], check=False)
+    except FileNotFoundError as e:
+        raise TavlaError(f"editor not found: {cmd!r} (set $EDITOR)") from e
+    if result.returncode != 0:
+        raise TavlaError(f"editor {cmd!r} exited with status {result.returncode}")
+
+
+def edit_until_valid(session: EditSession, finish: Callable[[], T]) -> T:
+    """Open the editor, then validate + commit via ``finish``.
+
+    On a validation error, offer to re-open the editor (like ``git commit``).
+    If declined — or there's no terminal to ask on — the file is restored so
+    the content repo never keeps an invalid, uncommitted edit.
+    """
+    while True:
+        open_in_editor(session.path)
+        try:
+            return finish()
+        except ValidationError as e:
+            typer.secho(f"error: {e}", fg=typer.colors.RED, err=True)
+            if not sys.stdin.isatty() or not typer.confirm("Re-open the editor?", default=True):
+                session.restore()
+                typer.echo("Edit discarded; file restored.", err=True)
+                raise typer.Exit(e.exit_code) from e

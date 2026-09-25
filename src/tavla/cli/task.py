@@ -10,15 +10,70 @@ from tavla.cli.common import (
     JsonOpt,
     complete_project,
     complete_task,
+    edit_until_valid,
     emit_json,
     fmt_date,
     handles_errors,
     state,
     table,
 )
-from tavla.core.entities import Task, TaskStatus, to_dict
+from tavla.core import ops
+from tavla.core.dates import parse_date
+from tavla.core.entities import Priority, Task, TaskStatus, to_dict
 
 app = typer.Typer(help="Create, list and inspect tasks.", no_args_is_help=True)
+
+
+@app.command()
+@handles_errors
+def add(
+    ctx: typer.Context,
+    title: Annotated[str, typer.Argument(help="Task title.")],
+    project_id: Annotated[
+        str,
+        typer.Option(
+            "--project", "-p", help="Project to add the task to.", autocompletion=complete_project
+        ),
+    ],
+    priority: Annotated[Priority, typer.Option("--priority", help="Task priority.")] = (
+        Priority.MED
+    ),
+    due: Annotated[
+        str | None,
+        typer.Option("--due", help="YYYY-MM-DD, today, tomorrow, +3d, +2w or a weekday."),
+    ] = None,
+    tags: Annotated[str | None, typer.Option("--tags", help="Comma-separated tags.")] = None,
+    id_: Annotated[
+        str | None, typer.Option("--id", help="Explicit id (default: derived from the title).")
+    ] = None,
+) -> None:
+    """Create a new task in a project and commit it."""
+    content = state(ctx).content()
+    project = content.project(project_id)
+    task = ops.add_task(
+        content,
+        title,
+        project,
+        id=id_,
+        priority=priority,
+        due=parse_date(due) if due else None,
+        tags=ops.parse_tags(tags),
+    )
+    typer.echo(f"Added task {task.id} to {project.id}")
+
+
+@app.command()
+@handles_errors
+def edit(
+    ctx: typer.Context,
+    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+) -> None:
+    """Open the task's markdown file in $EDITOR, then validate and commit."""
+    content = state(ctx).content()
+    task = content.task(task_id)
+    session = ops.EditSession(task.path)
+    edited = edit_until_valid(session, lambda: ops.finish_task_edit(content, task, session))
+    typer.echo("No changes." if edited is None else f"Saved task {edited.id}")
 
 
 def _sort_key(task: Task) -> tuple:

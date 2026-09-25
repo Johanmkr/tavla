@@ -14,7 +14,8 @@ INBOX_FILE = "inbox.md"
 LIBRARY_DIR = "library"
 PROJECTS_DIR = "projects"
 
-_REGISTRY_TEMPLATE = "# Master index of top-level projects — managed by tavla.\n[]\n"
+REGISTRY_HEADER = "# Master index of top-level projects — managed by tavla.\n"
+_REGISTRY_TEMPLATE = REGISTRY_HEADER + "[]\n"
 _INBOX_TEMPLATE = "# Inbox\n\n"
 
 

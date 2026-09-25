@@ -3,7 +3,7 @@
 A personal research operations tool: multi-project progress tracking, tasks,
 deliverables and reading material — CLI-first, plain text, git-native.
 
-> Status: early development (milestone 2 — read path: `project`/`task` `list`/`show`).
+> Status: early development (milestone 3 — create/edit projects and tasks, auto-committed).
 
 ## Install (development)
 
@@ -17,6 +17,11 @@ uv venv && uv pip install -e '.[dev]'
 tavla init                       # creates ~/.local/share/tavla/ as a git repo
 tavla init --content-dir ~/notes/tavla
 
+tavla project add "Adaptive sampling" --priority high --tags bayes,mcmc
+tavla task add "Write introduction" --project adap --due fri
+tavla task edit write-intro       # opens $EDITOR; validated and committed on save
+tavla task list
+
 # Try the read commands against the bundled demo tree:
 tavla --content-dir example-content project list
 tavla --content-dir example-content task list
@@ -25,6 +30,11 @@ tavla --content-dir example-content project show project-a --json
 ```
 
 Enable id tab-completion with `tavla --install-completion`.
+
+Every change tavla makes is committed to the content repo's git history
+automatically (`project: add …`, `task: edit …`), so `git log` is your audit
+trail and `git revert` is your undo. Only the files tavla touched are
+committed — anything else you have staged is left alone.
 
 ## Where your data lives
 

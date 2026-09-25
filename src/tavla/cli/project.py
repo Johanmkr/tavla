@@ -10,17 +10,52 @@ import typer
 from tavla.cli.common import (
     JsonOpt,
     complete_project,
+    edit_until_valid,
     emit_json,
     fmt_date,
     handles_errors,
     state,
     table,
 )
-from tavla.core.entities import ProjectStatus, TaskStatus, to_dict
+from tavla.core import ops
+from tavla.core.entities import PROJECT_FILE, Priority, ProjectStatus, TaskStatus, to_dict
 
 app = typer.Typer(help="Create, list and inspect projects.", no_args_is_help=True)
 
 RECENT_LOG_ENTRIES = 5
+
+
+@app.command()
+@handles_errors
+def add(
+    ctx: typer.Context,
+    name: Annotated[str, typer.Argument(help="Project title.")],
+    priority: Annotated[Priority, typer.Option("--priority", help="Project priority.")] = (
+        Priority.MED
+    ),
+    tags: Annotated[str | None, typer.Option("--tags", help="Comma-separated tags.")] = None,
+    id_: Annotated[
+        str | None, typer.Option("--id", help="Explicit id (default: derived from the name).")
+    ] = None,
+) -> None:
+    """Create a new project and commit it."""
+    content = state(ctx).content()
+    project = ops.add_project(content, name, id=id_, priority=priority, tags=ops.parse_tags(tags))
+    typer.echo(f"Added project {project.id}")
+
+
+@app.command()
+@handles_errors
+def edit(
+    ctx: typer.Context,
+    project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
+) -> None:
+    """Open the project's project.yaml in $EDITOR, then validate and commit."""
+    content = state(ctx).content()
+    project = content.project(project_id)
+    session = ops.EditSession(project.path / PROJECT_FILE)
+    edited = edit_until_valid(session, lambda: ops.finish_project_edit(content, project, session))
+    typer.echo("No changes." if edited is None else f"Saved project {edited.id}")
 
 
 @app.command("list")

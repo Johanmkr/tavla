@@ -39,20 +39,31 @@ def init_repo(path: Path) -> None:
         _git(path, "init", "--quiet")
 
 
-def commit(repo: Path, message: str, paths: Iterable[Path | str] | None = None) -> bool:
-    """Stage ``paths`` (or everything) and commit with ``message``.
+def require_repo(path: Path) -> None:
+    """Fail before writing anything if auto-commit would be impossible."""
+    if not is_repo(path):
+        raise GitError(f"{path} is not a git repository; tavla needs one to record changes")
 
-    Returns False without committing if there is nothing staged.
+
+def commit(repo: Path, message: str, paths: Iterable[Path | str] | None = None) -> bool:
+    """Stage and commit ``paths`` (or everything) with ``message``.
+
+    With ``paths``, only those paths are committed — anything else the user has
+    staged is left alone. Returns False if there was nothing to commit.
     """
     if paths is None:
         _git(repo, "add", "--all")
+        pathspec: list[str] = []
     else:
-        _git(repo, "add", "--", *(str(p) for p in paths))
+        pathspec = ["--", *(str(p) for p in paths)]
+        if len(pathspec) == 1:
+            return False
+        _git(repo, "add", "--all", *pathspec)
     staged = subprocess.run(
-        ["git", "-C", str(repo), "diff", "--cached", "--quiet"],
+        ["git", "-C", str(repo), "diff", "--cached", "--quiet", *pathspec],
         check=False,
     )
     if staged.returncode == 0:
         return False
-    _git(repo, "commit", "--quiet", "-m", message)
+    _git(repo, "commit", "--quiet", "-m", message, *pathspec)
     return True
