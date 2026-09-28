@@ -104,6 +104,18 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
 
 ## Upgrading
 
+??? question "How do I update tavla?"
+    Run `tv update`, or `tv update --check` to see what's new first. It
+    fast-forwards the clone you installed from to `origin/main`. See
+    [Updating tavla](getting-started.md#updating-tavla).
+
+??? question "`tv update` says it can't update itself."
+    `update` only works when tavla runs from a git clone (the
+    `uv tool install --editable .` install in the README). If you installed
+    it some other way, reinstall from a clone. If it refuses because of
+    uncommitted changes, another branch or diverged commits, sort that out
+    in the clone with git first.
+
 ??? question "tavla says my content uses an older layout."
     Run `tavla migrate --dry-run` to see the plan, then `tavla migrate`. It's
     a single commit, so `git revert HEAD` in the content repo undoes it. The

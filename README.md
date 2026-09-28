@@ -48,6 +48,11 @@ tavla --install-completion       # optional: tab-completion for commands and ids
 tv --install-completion          # ...and the same for `tv`
 ```
 
+To update later, run `tavla update` (`--check` to just see what's new). It
+fast-forwards your clone to `origin/main` (and reinstalls with uv if
+dependencies changed). It refuses if you have local changes, another branch
+checked out, or commits that diverge from `main`.
+
 ## Getting started
 
 ```sh
@@ -95,6 +100,7 @@ id prefixes and shows each title next to its id.
 | --- | --- |
 | `tavla init [--content-dir PATH]` | Create the content repo and default config |
 | `tavla migrate [--dry-run]` | Upgrade an older content repo to the current layout (one commit) |
+| `tavla update [--check]` | Update tavla itself to the latest `main` (fast-forward only) |
 | `tavla capture TEXT…` | Add an idea to the inbox (quotes optional) |
 | `tavla log PROJECT TEXT…` | Append a timestamped line to the project's `log.md` |
 | `tavla next [-p PROJECT] [--priority P] [-n N]` | Open tasks not waiting on others, most important first (default 10; `-n 0` for all), then goals with no tasks yet |
