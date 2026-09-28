@@ -6,6 +6,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tavla.cli.main import app
+from tavla.core import parsing
 from tavla.core.dates import local_today
 from tavla.core.errors import EXIT_ERROR, EXIT_INVALID, EXIT_NOT_FOUND
 from tavla.core.store import Content
@@ -99,6 +100,55 @@ def test_project_edit(run, git_content, git, editor):
     assert result.exit_code == 0, result.output
     assert Content.open(git_content).project("project-b").priority == "high"
     assert _head(git, git_content) == "project: edit project-b"
+
+
+def test_task_edit_fields_skips_editor(run, git_content, git, editor):
+    calls = editor()
+    result = run(
+        "task",
+        "edit",
+        "write-i",
+        "--due",
+        "03.10.26",
+        "--priority",
+        "low",
+        "--tags",
+        "+new,-thesis",
+    )
+    assert result.exit_code == 0, result.output
+    assert not calls.exists() or calls.read_text() == ""
+    task = Content.open(git_content).task("write-intro")
+    assert task.due == dt.date(2026, 10, 3)
+    assert task.priority == "low"
+    assert task.tags == ["writing", "new"]
+    assert task.updated == local_today()
+    assert _head(git, git_content) == "task: edit write-intro (priority, due, tags)"
+
+
+def test_task_edit_clear_due_and_retitle(run, git_content, git):
+    result = run("task", "edit", "write-intro", "--due", "none", "--title", "Intro")
+    assert result.exit_code == 0, result.output
+    task = Content.open(git_content).task("write-intro")
+    assert task.due is None
+    assert task.title == "Intro"
+    assert "# Intro\n" in task.path.read_text()
+    assert "## Subtasks" in task.path.read_text()  # rest of the body untouched
+
+
+def test_task_edit_same_value_is_noop(run, git_content, git):
+    result = run("task", "edit", "write-intro", "--status", "doing")
+    assert "No changes." in result.output
+    assert _head(git, git_content) == "initial"
+
+
+def test_project_edit_fields(run, git_content, git):
+    result = run("project", "edit", "project-b", "--status", "active", "--title", "Lit review")
+    assert result.exit_code == 0, result.output
+    project = Content.open(git_content).project("project-b")
+    assert (project.status, project.title) == ("active", "Lit review")
+    registry = parsing.read_yaml(git_content / "registry.yaml")
+    assert {e["id"]: e["status"] for e in registry}["project-b"] == "active"
+    assert _head(git, git_content) == "project: edit project-b (title, status)"
 
 
 def test_missing_editor(run, monkeypatch):

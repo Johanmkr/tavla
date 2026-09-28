@@ -156,6 +156,23 @@ def test_task_edit_keeps_user_set_updated(content):
     assert ops.finish_task_edit(content, task, session, today=TODAY).updated == dt.date(2026, 9, 22)
 
 
+def test_task_edit_normalizes_day_first_dates(content, git):
+    task = content.task("write-intro")
+    session = ops.EditSession(task.path)
+    _edit(task.path, "due: 2026-10-01", "due: 03.10.26")
+    assert ops.finish_task_edit(content, task, session, today=TODAY).due == dt.date(2026, 10, 3)
+    assert "due: 2026-10-03\n" in task.path.read_text()
+    assert _is_clean(git, content.root)
+
+
+def test_task_edit_rejects_yearless_date_in_file(content):
+    task = content.task("write-intro")
+    session = ops.EditSession(task.path)
+    _edit(task.path, "due: 2026-10-01", "due: 03.10")
+    with pytest.raises(ValidationError, match="invalid due date"):
+        ops.finish_task_edit(content, task, session, today=TODAY)
+
+
 def test_task_edit_invalid_is_not_committed(content, git):
     task = content.task("write-intro")
     session = ops.EditSession(task.path)
@@ -193,3 +210,39 @@ def test_project_edit_syncs_registry(content, git):
     assert registry["project-b"] == "active"
     assert _subjects(git, content.root)[0] == "project: edit project-b"
     assert _is_clean(git, content.root)
+
+
+# --- field edits ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("spec", "expected"),
+    [("x, y", ["x", "y"]), ("+c,-a", ["b", "c"]), ("+a", ["a", "b"]), ("-zzz", ["a", "b"])],
+)
+def test_apply_tags(spec, expected):
+    assert ops.apply_tags(["a", "b"], spec) == expected
+
+
+def test_apply_tags_mixed_is_error():
+    with pytest.raises(ValidationError):
+        ops.apply_tags([], "a,+b")
+
+
+def test_set_task_fields_keeps_comments_and_order(content, git):
+    task = content.task("write-intro")
+    task.path.write_text(task.path.read_text().replace("priority: high", "priority: high  # !"))
+    git(content.root, "commit", "-qam", "comment")
+    content.refresh()
+    ops.set_task_fields(content, content.task("write-intro"), {"status": "blocked"}, today=TODAY)
+    text = task.path.read_text()
+    assert "status: blocked\npriority: high  # !\n" in text
+    assert "updated: 2026-09-25" in text
+    assert _is_clean(git, content.root)
+
+
+def test_set_task_fields_invalid_restores(content, git):
+    task = content.task("write-intro")
+    before = task.path.read_text()
+    with pytest.raises(ValidationError):
+        ops.set_task_fields(content, task, {"status": "wip"}, today=TODAY)
+    assert task.path.read_text() == before

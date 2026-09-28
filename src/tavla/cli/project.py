@@ -8,6 +8,7 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import (
+    TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
     complete_project,
@@ -51,11 +52,31 @@ def add(
 def edit(
     ctx: typer.Context,
     project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
+    title: Annotated[str | None, typer.Option("--title", help="New title.")] = None,
+    status: Annotated[ProjectStatus | None, typer.Option("--status", help="New status.")] = None,
+    priority: Annotated[Priority | None, typer.Option("--priority", help="New priority.")] = None,
+    tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Open the project's project.yaml in $EDITOR, then validate and commit."""
+    """Change fields with the options given, or with none open project.yaml in $EDITOR.
+
+    Either way the result is validated and committed.
+    """
     content = state(ctx, content_dir=content_dir).content()
     project = content.project(project_id)
+    changes: dict = {}
+    if title is not None:
+        changes["title"] = ops.clean_title(title)
+    if status is not None:
+        changes["status"] = status.value
+    if priority is not None:
+        changes["priority"] = priority.value
+    if tags is not None:
+        changes["tags"] = ops.apply_tags(project.tags, tags)
+    if changes:
+        edited = ops.set_project_fields(content, project, changes)
+        typer.echo("No changes." if edited is None else f"Saved project {edited.id}")
+        return
     session = ops.EditSession(project.path / PROJECT_FILE)
     edited = edit_until_valid(session, lambda: ops.finish_project_edit(content, project, session))
     typer.echo("No changes." if edited is None else f"Saved project {edited.id}")

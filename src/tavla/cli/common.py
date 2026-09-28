@@ -16,6 +16,7 @@ from typing import Annotated, Any, ParamSpec, TypeVar
 import typer
 
 from tavla import config
+from tavla.core.dates import parse_date
 from tavla.core.entities import to_dict
 from tavla.core.errors import TavlaError, ValidationError
 from tavla.core.ops import EditSession
@@ -49,6 +50,16 @@ def state(ctx: typer.Context, *, json_out: bool = False, content_dir: Path | Non
 
 
 JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable output.")]
+DATE_HELP = "YYYY-MM-DD, DD.MM.YYYY, DD/MM/YY, today, tomorrow, +3d, +2w or a weekday."
+TAGS_EDIT_HELP = "Replace tags (a,b) or adjust them (+a,-b)."
+CLEAR_WORDS = ("none", "-")
+
+
+def date_change(value: str) -> Any:
+    """``--due`` on an edit: a date, or None to clear the field."""
+    return None if value.strip().lower() in CLEAR_WORDS else parse_date(value)
+
+
 # Hidden: documented once as a global option, but accepted after any command too.
 ContentDirOpt = Annotated[Path | None, typer.Option("--content-dir", hidden=True)]
 

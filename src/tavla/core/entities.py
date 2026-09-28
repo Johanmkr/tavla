@@ -14,7 +14,7 @@ from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
 
-from tavla.core import parsing
+from tavla.core import dates, parsing
 from tavla.core.errors import ValidationError
 
 
@@ -96,11 +96,16 @@ def _date(value: Any, name: str, path: Path) -> dt.date | None:
         return value.date()
     if isinstance(value, dt.date):
         return value
+    text = str(value).strip()
     try:
-        return dt.date.fromisoformat(str(value).strip())
-    except ValueError:
+        # Hand-edited files may use day-first dates, but they must include a
+        # year (a yearless date would drift); edits get rewritten to ISO.
+        if dates.DMY_WITH_YEAR_RE.match(text):
+            return dates.parse_dmy(text)
+        return dt.date.fromisoformat(text)
+    except (ValueError, ValidationError):
         raise ValidationError(
-            f"{path}: invalid {name} date '{value}' (expected YYYY-MM-DD)"
+            f"{path}: invalid {name} date '{value}' (expected YYYY-MM-DD or DD.MM.YYYY)"
         ) from None
 
 

@@ -30,7 +30,14 @@ from tavla.core.entities import (
     TaskStatus,
 )
 from tavla.core.errors import ValidationError
-from tavla.core.parsing import set_frontmatter_key, yaml_inline
+from tavla.core.parsing import (
+    remove_frontmatter_key,
+    remove_yaml_key,
+    set_first_heading,
+    set_frontmatter_key,
+    set_yaml_key,
+    yaml_inline,
+)
 from tavla.core.store import Content
 
 ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -92,11 +99,33 @@ def parse_tags(value: str | Iterable[str] | None) -> list[str]:
     return list(dict.fromkeys(p.strip() for p in parts if p.strip()))
 
 
+def apply_tags(current: Iterable[str], spec: str) -> list[str]:
+    """Apply a ``--tags`` value to existing tags.
+
+    ``"a,b"`` replaces the tags; ``"+a,-b"`` adds ``a`` and removes ``b``.
+    Mixing the two forms is an error.
+    """
+    items = parse_tags(spec)
+    signed = [t[0] in "+-" for t in items]
+    if not any(signed):
+        return items
+    if not all(signed):
+        raise ValidationError(f"tags '{spec}': use either a,b (replace) or +a,-b (adjust)")
+    tags = list(current)
+    for item in items:
+        name = item[1:].strip()
+        if item[0] == "+" and name not in tags:
+            tags.append(name)
+        elif item[0] == "-" and name in tags:
+            tags.remove(name)
+    return tags
+
+
 def _yaml_lines(fields: dict[str, Any]) -> str:
     return "".join(f"{k}: {yaml_inline(v)}\n" for k, v in fields.items())
 
 
-def _clean_title(title: str) -> str:
+def clean_title(title: str) -> str:
     title = " ".join(title.split())
     if not title:
         raise ValidationError("title must not be empty")
@@ -138,7 +167,7 @@ def add_project(
     today: dt.date | None = None,
 ) -> Project:
     git_sync.require_repo(content.root)
-    title = _clean_title(title)
+    title = clean_title(title)
     project_id = _new_id(content, title, id)
     directory = content.root / bootstrap.PROJECTS_DIR / project_id
     if directory.exists():
@@ -184,7 +213,7 @@ def add_task(
     today: dt.date | None = None,
 ) -> Task:
     git_sync.require_repo(content.root)
-    title = _clean_title(title)
+    title = clean_title(title)
     task_id = _new_id(content, title, id)
     path = project.path / TASKS_DIR / f"{task_id}.md"
     if path.exists():
@@ -228,6 +257,21 @@ class EditSession:
         self.path.write_text(self.original)
 
 
+def _normalize_dates(path: Path, entity: Any, keys: Iterable[str], *, frontmatter: bool) -> None:
+    """Rewrite hand-typed day-first dates (``01.10.2026``) as ISO, in place.
+
+    YAML already loads ISO dates as dates, so a string value that the entity
+    parsed as a date is one the user typed in another format.
+    """
+    setter = set_frontmatter_key if frontmatter else set_yaml_key
+    text = original = path.read_text()
+    for key in keys:
+        if isinstance(entity.meta.get(key), str) and getattr(entity, key) is not None:
+            text = setter(text, key, getattr(entity, key))
+    if text != original:
+        path.write_text(text)
+
+
 def _edit_message(kind: str, old_id: str, new_id: str) -> str:
     if old_id != new_id:
         return f"{kind}: rename {old_id} -> {new_id}"
@@ -249,6 +293,7 @@ def finish_task_edit(
     content.refresh()
     _check_unique(content, edited.id, task.path)
 
+    _normalize_dates(task.path, edited, ("created", "updated", "due"), frontmatter=True)
     today = today or dates.local_today()
     if edited.updated == task.updated and edited.updated != today:
         task.path.write_text(set_frontmatter_key(task.path.read_text(), "updated", today))
@@ -266,6 +311,7 @@ def finish_project_edit(content: Content, project: Project, session: EditSession
     edited = Project.load(project.path, project.parent)
     content.refresh()
     _check_unique(content, edited.id, project.path / PROJECT_FILE)
+    _normalize_dates(project.path / PROJECT_FILE, edited, ("created",), frontmatter=False)
 
     registry = sync_registry(content)
     git_sync.commit(
@@ -275,6 +321,86 @@ def finish_project_edit(content: Content, project: Project, session: EditSession
     )
     content.refresh()
     return edited
+
+
+# --- field edits (no editor) --------------------------------------------------
+#
+# ``changes`` maps a top-level key to its new value, or to None to remove it.
+# Only the affected lines are rewritten, so comments and field order survive.
+
+
+def _apply_changes(text: str, changes: dict[str, Any], *, frontmatter: bool) -> str:
+    setter = set_frontmatter_key if frontmatter else set_yaml_key
+    remover = remove_frontmatter_key if frontmatter else remove_yaml_key
+    for key, value in changes.items():
+        text = remover(text, key) if value is None else setter(text, key, value)
+    return text
+
+
+def _commit_field_edit(
+    content: Content, kind: str, id_: str, keys: Iterable[str], paths: list[Path]
+) -> None:
+    git_sync.commit(content.root, f"{kind}: edit {id_} ({', '.join(keys)})", paths)
+    content.refresh()
+
+
+def set_task_fields(
+    content: Content,
+    task: Task,
+    changes: dict[str, Any],
+    *,
+    title: str | None = None,
+    today: dt.date | None = None,
+) -> Task | None:
+    """Set frontmatter fields (and optionally the ``# title`` heading) of a task.
+
+    Bumps ``updated`` unless it is among ``changes``. Returns None if nothing
+    changed; raises ValidationError (leaving the file untouched) if the result
+    would be invalid.
+    """
+    git_sync.require_repo(content.root)
+    original = task.path.read_text()
+    text = _apply_changes(original, changes, frontmatter=True)
+    keys = list(changes)
+    if title is not None:
+        title = clean_title(title)
+        retitled = set_first_heading(text, title)
+        text = retitled if retitled is not None else set_frontmatter_key(text, "title", title)
+        keys.append("title")
+    if text == original:
+        return None
+    if "updated" not in changes:
+        text = set_frontmatter_key(text, "updated", today or dates.local_today())
+    task.path.write_text(text)
+    try:
+        Task.load(task.path, task.project)
+    except ValidationError:
+        task.path.write_text(original)
+        raise
+    _commit_field_edit(content, "task", task.id, keys, [task.path])
+    return Task.load(task.path, task.project)
+
+
+def set_project_fields(
+    content: Content, project: Project, changes: dict[str, Any]
+) -> Project | None:
+    """Set top-level fields in ``project.yaml``. Returns None if nothing changed."""
+    git_sync.require_repo(content.root)
+    path = project.path / PROJECT_FILE
+    original = path.read_text()
+    text = _apply_changes(original, changes, frontmatter=False)
+    if text == original:
+        return None
+    path.write_text(text)
+    try:
+        Project.load(project.path, project.parent)
+    except ValidationError:
+        path.write_text(original)
+        raise
+    content.refresh()
+    registry = sync_registry(content)
+    _commit_field_edit(content, "project", project.id, changes, [path, registry])
+    return Project.load(project.path, project.parent)
 
 
 # --- append-only capture ------------------------------------------------------

@@ -7,10 +7,13 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import (
+    DATE_HELP,
+    TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
     complete_project,
     complete_task,
+    date_change,
     edit_until_valid,
     emit_json,
     fmt_date,
@@ -41,7 +44,7 @@ def add(
     ),
     due: Annotated[
         str | None,
-        typer.Option("--due", help="YYYY-MM-DD, today, tomorrow, +3d, +2w or a weekday."),
+        typer.Option("--due", help=DATE_HELP),
     ] = None,
     tags: Annotated[str | None, typer.Option("--tags", help="Comma-separated tags.")] = None,
     id_: Annotated[
@@ -69,11 +72,32 @@ def add(
 def edit(
     ctx: typer.Context,
     task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    title: Annotated[str | None, typer.Option("--title", help="New title.")] = None,
+    status: Annotated[TaskStatus | None, typer.Option("--status", help="New status.")] = None,
+    priority: Annotated[Priority | None, typer.Option("--priority", help="New priority.")] = None,
+    due: Annotated[str | None, typer.Option("--due", help=f"{DATE_HELP} 'none' clears it.")] = None,
+    tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Open the task's markdown file in $EDITOR, then validate and commit."""
+    """Change fields with the options given, or with none open the task in $EDITOR.
+
+    Either way the result is validated and committed.
+    """
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
+    changes: dict = {}
+    if status is not None:
+        changes["status"] = status.value
+    if priority is not None:
+        changes["priority"] = priority.value
+    if due is not None:
+        changes["due"] = date_change(due)
+    if tags is not None:
+        changes["tags"] = ops.apply_tags(task.tags, tags)
+    if changes or title is not None:
+        edited = ops.set_task_fields(content, task, changes, title=title)
+        typer.echo("No changes." if edited is None else f"Saved task {edited.id}")
+        return
     session = ops.EditSession(task.path)
     edited = edit_until_valid(session, lambda: ops.finish_task_edit(content, task, session))
     typer.echo("No changes." if edited is None else f"Saved task {edited.id}")

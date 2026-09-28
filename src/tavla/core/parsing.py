@@ -132,9 +132,40 @@ def set_yaml_key(text: str, key: str, value: Any) -> str:
     return "".join([*lines, new_line])
 
 
-def set_frontmatter_key(text: str, key: str, value: Any) -> str:
+def remove_yaml_key(text: str, key: str) -> str:
+    """Remove top-level ``key`` (and a block-style value) from a YAML mapping document."""
+    lines = text.splitlines(keepends=True)
+    key_re = re.compile(rf"^{re.escape(key)}\s*:")
+    for i, line in enumerate(lines):
+        if key_re.match(line):
+            j = i + 1
+            while j < len(lines) and lines[j].strip() and lines[j][0] in " \t-":
+                j += 1
+            return "".join([*lines[:i], *lines[j:]])
+    return text
+
+
+def _map_frontmatter(text: str, fn: Any) -> str:
     m = _FRONTMATTER_RE.match(text)
     if not m:
         raise ValidationError("file has no YAML frontmatter block")
-    inner = set_yaml_key(m.group(1) or "", key, value)
-    return f"---\n{inner}---\n{text[m.end() :]}"
+    return f"---\n{fn(m.group(1) or '')}---\n{text[m.end() :]}"
+
+
+def set_frontmatter_key(text: str, key: str, value: Any) -> str:
+    return _map_frontmatter(text, lambda inner: set_yaml_key(inner, key, value))
+
+
+def remove_frontmatter_key(text: str, key: str) -> str:
+    return _map_frontmatter(text, lambda inner: remove_yaml_key(inner, key))
+
+
+def set_first_heading(text: str, title: str) -> str | None:
+    """Replace the text of the first level-1 heading. Returns None if there is none."""
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        m = _HEADING_RE.match(line)
+        if m and len(m.group(1)) == 1:
+            lines[i] = f"# {title}\n"
+            return "".join(lines)
+    return None

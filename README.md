@@ -20,8 +20,9 @@ Requires Python 3.11+ and `git`.
 
 ```sh
 git clone <this repo> && cd tavla
-uv tool install --editable .     # puts `tavla` on your PATH; `git pull` updates it
+uv tool install --editable .     # puts `tavla` (and the short alias `tv`) on your PATH
 tavla --install-completion       # optional: tab-completion for commands and ids
+tv --install-completion          # ...and the same for `tv`
 ```
 
 ## Getting started
@@ -70,11 +71,11 @@ tavla lists the candidates instead of guessing.
 | `tavla project add NAME [--priority P] [--tags a,b] [--id ID]` | Create a project |
 | `tavla project list [--status S] [--all]` | List projects (archived hidden unless `--all`) |
 | `tavla project show ID` | Metadata, subprojects, task counts, deliverables, recent log |
-| `tavla project edit ID` | Edit `project.yaml` in `$EDITOR` |
+| `tavla project edit ID [--title T] [--status S] [--priority P] [--tags a,b\|+a,-b]` | Change the given fields; with no options, edit `project.yaml` in `$EDITOR` |
 | `tavla task add TITLE -p PROJECT [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a task |
 | `tavla task list [-p PROJECT] [--status S] [--all]` | List tasks (done hidden unless `--all`) |
 | `tavla task show ID` | Metadata plus the full task file |
-| `tavla task edit ID` | Edit the task file in `$EDITOR` |
+| `tavla task edit ID [--title T] [--status S] [--priority P] [--due DATE\|none] [--tags a,b\|+a,-b]` | Change the given fields; with no options, edit the task file in `$EDITOR` |
 | `tavla task start ID` | Mark a task `doing` (also reopens a `done` task) |
 | `tavla task done ID` | Mark a task done |
 
@@ -91,11 +92,12 @@ Global options: `--content-dir PATH`, `--json`, `-y/--yes`, `-v/--verbose`.
 | priority | `high`, `med` (default), `low` |
 | project status | `active` (default), `paused`, `done`, `archived` |
 | task status | `todo` (default), `doing`, `blocked`, `done` |
-| dates (`--due`) | `2026-10-01`, `today`, `tomorrow`, `+3d`, `+2w`, `fri`/`friday` (the next one) |
+| dates (`--due`) | `2026-10-01`; day-first `01.10.2026`, `01/10/26`, `01-10-2026` (`.`, `/` or `-`, 2- or 4-digit year); `01.10` (next 1 October); `today`, `tomorrow`, `+3d`, `+2w`, `fri`/`friday` (the next one) |
 
 `task start` and `task done` cover the everyday status changes. For anything
-else (e.g. marking a task `blocked`), run `tavla task edit ID` and change the
-`status:` line.
+else, use flags on `edit`, e.g. `tv task edit ID --status blocked --due fri`.
+Files always store dates as `YYYY-MM-DD`; if you type a day-first date (with a
+year) while editing a file by hand, tavla rewrites it to ISO when you save.
 
 ### How `next` and `status` decide
 
