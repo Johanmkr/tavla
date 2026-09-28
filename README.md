@@ -106,6 +106,7 @@ id prefixes and shows each title next to its id.
 | `tavla goal show ID` | Metadata, its tasks, and the goal file |
 | `tavla goal edit ID [--title T] [--status S] [--priority P] [--due DATE\|none] [--tags …]` | Change the given fields; with no options, edit the goal file in `$EDITOR` |
 | `tavla goal start ID` / `goal done ID` | Mark a goal `doing` / `done` |
+| `tavla goal to-task ID [-g OTHER_GOAL]` | Turn a goal into a task (loose, or under another goal); keeps its fields and notes. Refused while tasks still belong to it |
 | **Tasks** | |
 | `tavla task add TITLE (-g GOAL \| -p PROJECT) [--after IDS] [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a task under a goal, or directly in a project |
 | `tavla task list [-p PROJECT] [-g GOAL] [--status S] [--all]` | List tasks (done hidden unless `--all`; `*` = waiting on dependencies) |

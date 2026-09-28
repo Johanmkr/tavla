@@ -98,7 +98,9 @@ def apply(migration: MigrationPlan, *, today: dt.date | None = None) -> bool:
         created = meta.get("created") or today
         updated = meta.get("updated") or created
         move.new.parent.mkdir(parents=True, exist_ok=True)
-        move.new.write_text(_add_ideas_section(_strip_subtasks(text)))
+        move.new.write_text(
+            parsing.ensure_section(_strip_subtasks(text), IDEAS_HEADING, before=("Updates",))
+        )
         move.old.unlink()
         for task in move.tasks:
             _write_task(move.old.parent / f"{task.id}.md", task, move, created, updated)
@@ -166,24 +168,6 @@ def _strip_subtasks(text: str) -> str:
     if after and before:
         before.append("\n")
     return "".join([*before, *after])
-
-
-def _add_ideas_section(text: str) -> str:
-    """Add an empty ``## Ideas`` section before ``## Updates`` (or at the end)."""
-    lines = text.splitlines(keepends=True)
-    start = parsing.frontmatter_lines(text)
-    stripped = [ln.rstrip("\n") for ln in lines]
-    if parsing.section_span(stripped, IDEAS_HEADING, start) is not None:
-        return text
-    updates = parsing.section_span(stripped, "Updates", start)
-    if updates is None:
-        while lines and not lines[-1].strip():
-            lines.pop()
-        if lines and not lines[-1].endswith("\n"):
-            lines[-1] += "\n"
-        return "".join([*lines, f"\n## {IDEAS_HEADING}\n"])
-    at = updates[0]
-    return "".join([*lines[:at], f"## {IDEAS_HEADING}\n\n", *lines[at:]])
 
 
 def _write_task(

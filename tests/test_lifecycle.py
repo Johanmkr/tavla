@@ -279,3 +279,68 @@ def test_cli_start_reopens_done_task(run, git_content):
 def test_cli_goal_start(run, git_content):
     result = run("goal", "start", "write-m")
     assert "Started: write-methods (Write methods section) — was todo" in result.output
+
+
+# --- goal to-task ------------------------------------------------------------------
+
+
+def test_goal_to_task_loose(content, git):
+    goal = content.goal("write-methods")
+    old_text = goal.path.read_text()
+    task = ops.goal_to_task(content, goal, today=TODAY)
+    assert (task.id, task.goal, task.project, task.status, task.due) == (
+        "write-methods",
+        None,
+        "project-a",
+        "todo",
+        dt.date(2026, 10, 15),
+    )
+    assert task.path == content.root / "projects/project-a/tasks/write-methods.md"
+    assert not goal.path.exists()
+    text = task.path.read_text()
+    assert "## Subtasks\n\n## Ideas" in text
+    assert old_text.split("---\n")[2].strip() in text.replace("## Subtasks\n\n", "")
+    assert "write-methods" not in [g.id for g in content.goals()]
+    assert _head(git, content.root) == "goal: to-task write-methods"
+    assert _clean(git, content.root)
+
+
+def test_goal_to_task_under_other_goal(content, git):
+    task = ops.goal_to_task(
+        content, content.goal("write-methods"), under=content.goal("write-intro"), today=TODAY
+    )
+    assert task.goal == "write-intro"
+    assert content.goal("write-intro").tasks_total == 4
+    assert _head(git, content.root) == "goal: to-task write-methods under write-intro"
+
+
+def test_goal_to_task_refused_while_it_has_tasks(content, git):
+    with pytest.raises(ValidationError, match="still has tasks"):
+        ops.goal_to_task(content, content.goal("write-intro"))
+    assert content.goal("write-intro").path.exists()
+    assert _head(git, content.root) == "initial"
+
+
+def test_goal_to_task_under_goal_in_other_project_refused(content):
+    with pytest.raises(ValidationError, match="is in project"):
+        ops.goal_to_task(content, content.goal("write-methods"), under=content.goal("write-review"))
+
+
+def test_goal_to_task_under_itself_restores(content, git):
+    goal = content.goal("write-methods")
+    before = goal.path.read_text()
+    with pytest.raises(ValidationError, match="unknown goal"):
+        ops.goal_to_task(content, goal, under=goal)
+    assert goal.path.read_text() == before
+    assert not (content.root / "projects/project-a/tasks/write-methods.md").exists()
+    assert _clean(git, content.root)
+
+
+def test_cli_goal_to_task(run, git_content):
+    result = run("goal", "to-task", "write-m")
+    assert result.exit_code == 0, result.output
+    assert "Goal write-methods is now a task in project project-a" in result.output
+    assert "write-methods" in run("next").output.split("Goals with no tasks")[0]
+    result = run("goal", "to-task", "write-i")
+    assert result.exit_code == EXIT_INVALID
+    assert "still has tasks" in result.output

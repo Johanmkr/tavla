@@ -20,6 +20,7 @@ from tavla.core import bootstrap, dates, git_sync
 from tavla.core.entities import (
     GOALS_DIR,
     IDEAS_FILE,
+    IDEAS_HEADING,
     LOG_FILE,
     PROJECT_FILE,
     TASKS_DIR,
@@ -34,6 +35,8 @@ from tavla.core.entities import (
 )
 from tavla.core.errors import ValidationError
 from tavla.core.parsing import (
+    SUBTASKS_HEADING,
+    ensure_section,
     remove_frontmatter_key,
     remove_yaml_key,
     set_first_heading,
@@ -378,6 +381,51 @@ def _rename_references(content: Content, item: Item, old_id: str, new_id: str) -
         task.path.write_text(text)
         changed.append(task.path)
     return changed
+
+
+def goal_to_task(
+    content: Content, goal: Goal, *, under: Goal | None = None, today: dt.date | None = None
+) -> Task:
+    """Turn a goal into a task in the same project: loose, or under another
+    goal ``under``. The file moves from ``goals/`` to ``tasks/`` with its
+    frontmatter and notes intact (a ``## Subtasks`` section is added if
+    missing). Refused while tasks still point at the goal.
+    """
+    git_sync.require_repo(content.root)
+    children = content.goal_tasks(goal)
+    if children:
+        ids = ", ".join(t.id for t in children)
+        raise ValidationError(
+            f"goal '{goal.id}' still has tasks ({ids}); move or finish them first"
+        )
+    if under is not None and under.project != goal.project:
+        raise ValidationError(
+            f"goal '{under.id}' is in project {under.project}, not {goal.project}"
+        )
+    project = content.project(goal.project)
+    path = project.path / TASKS_DIR / goal.path.name
+    if path.exists():
+        raise ValidationError(f"file already exists: {path}")
+
+    original = text = goal.path.read_text()
+    if under is not None:
+        text = set_frontmatter_key(text, "goal", under.id)
+    text = set_frontmatter_key(text, "updated", today or dates.local_today())
+    text = ensure_section(text, SUBTASKS_HEADING, before=(IDEAS_HEADING, "Updates"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    goal.path.unlink()
+    try:
+        _check_task_links(content, Task.load(path, project.id))
+    except ValidationError:
+        path.unlink()
+        goal.path.write_text(original)
+        content.refresh()
+        raise
+    where = f" under {under.id}" if under else ""
+    git_sync.commit(content.root, f"goal: to-task {goal.id}{where}", [goal.path, path])
+    content.refresh()
+    return content.task(goal.id)
 
 
 # --- editing ----------------------------------------------------------------

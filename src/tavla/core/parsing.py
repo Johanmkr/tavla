@@ -156,6 +156,26 @@ def append_to_section(text: str, heading: str, line: str) -> str:
     return "".join([*lines[:at], f"{line}\n", *lines[at:]])
 
 
+def ensure_section(text: str, heading: str, before: tuple[str, ...] = ()) -> str:
+    """Add an empty ``## <heading>`` section if there isn't one: in front of the
+    first of the ``before`` sections that exists, else at the end of the file."""
+    lines = text.splitlines(keepends=True)
+    start = frontmatter_lines(text)
+    stripped = [ln.rstrip("\n") for ln in lines]
+    if section_span(stripped, heading, start) is not None:
+        return text
+    spans = [section_span(stripped, b, start) for b in before]
+    found = [span[0] for span in spans if span is not None]
+    if found:
+        at = min(found)
+        return "".join([*lines[:at], f"## {heading}\n\n", *lines[at:]])
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    return "".join([*lines, f"\n## {heading}\n"])
+
+
 def remove_line(text: str, index: int) -> str:
     lines = text.splitlines(keepends=True)
     del lines[index]

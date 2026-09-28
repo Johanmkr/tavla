@@ -125,6 +125,30 @@ def done(ctx: typer.Context, goal_id: GoalArg, content_dir: ContentDirOpt = None
         )
 
 
+@app.command("to-task")
+@handles_errors
+def to_task(
+    ctx: typer.Context,
+    goal_id: GoalArg,
+    under: Annotated[
+        str | None,
+        typer.Option(
+            "--goal", "-g", help="Put the new task under this goal.", autocompletion=complete_goal
+        ),
+    ] = None,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Turn a goal into a task (loose in its project, or under another goal with -g).
+
+    The file keeps its id, fields and notes. Refused while tasks still belong to the goal.
+    """
+    content = state(ctx, content_dir=content_dir).content()
+    goal = content.goal(goal_id)
+    task = ops.goal_to_task(content, goal, under=content.goal(under) if under else None)
+    where = f"under goal {task.goal}" if task.goal else f"in project {task.project}"
+    typer.echo(f"Goal {goal.id} is now a task {where}")
+
+
 def _sort_key(goal: Goal) -> tuple:
     return (goal.priority.rank, goal.due is None, goal.due, goal.id)
 
