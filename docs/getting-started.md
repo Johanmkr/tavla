@@ -19,6 +19,34 @@ tv --install-completion
 
 Restart your shell afterwards.
 
+### Updating tavla
+
+```console
+$ tv update --check        # see what's new, change nothing
+2 new commits on origin/main:
+  1a2b3c4 ADD: ...
+  5d6e7f8 FIX: ...
+Run `tavla update` to install them.
+$ tv update
+...
+Updated tavla in /home/you/tavla: 9f8e7d6 -> 1a2b3c4
+```
+
+`update` pulls the latest `main` into the clone you installed from. It only
+fast-forwards, so it never merges, rebases or overwrites anything. It refuses
+to run, and tells you why, if the clone has uncommitted changes, has a branch
+other than `main` checked out, or has local commits that diverge from
+`origin/main`.
+
+Code changes take effect immediately. If the update changes `pyproject.toml`
+(new dependencies or commands), tavla also reinstalls itself with
+`uv tool install --force --editable <clone>`. If uv isn't on your PATH, or the
+reinstall fails, tavla says so and prints the command to run by hand. The
+code update itself has already been applied at that point.
+
+If a new version changes the content layout, tavla will ask you to run
+`tavla migrate` (see [Upgrading the layout](guide/content-repo.md#upgrading-the-layout)).
+
 ## Create your content repo
 
 ```console

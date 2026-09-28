@@ -10,7 +10,7 @@ import typer
 from tavla import __version__, config
 from tavla.cli import capture, goal, idea, overview, project, task
 from tavla.cli.common import State, handles_errors, state
-from tavla.core import bootstrap, migrate
+from tavla.core import bootstrap, migrate, self_update
 
 app = typer.Typer(
     name="tavla",
@@ -111,3 +111,36 @@ def migrate_(
         return
     migrate.apply(plan)
     typer.echo("Done. Committed as one change; `git revert HEAD` in the content repo undoes it.")
+
+
+@app.command()
+@handles_errors
+def update(
+    check: Annotated[
+        bool, typer.Option("--check", help="Only show what's new; change nothing.")
+    ] = False,
+) -> None:
+    """Update tavla to the latest version on the main branch (fast-forward only).
+
+    Works when tavla is installed from a git clone (`uv tool install --editable`).
+    Refuses to touch a clone with uncommitted changes, another branch checked
+    out, or local commits that diverge from origin/main.
+    """
+    repo = self_update.source_repo()
+    plan = self_update.check(repo)
+    if plan.up_to_date:
+        typer.echo(f"tavla is up to date ({plan.old[:7]}).")
+        return
+    n = len(plan.commits)
+    typer.secho(f"{n} new commit{'s' * (n != 1)} on {self_update.UPSTREAM}:", bold=True)
+    for line in plan.commits:
+        typer.echo(f"  {line}")
+    if check:
+        typer.echo("Run `tavla update` to install them.")
+        return
+    self_update.apply(plan)
+    typer.echo(f"Updated tavla in {repo}: {plan.old[:7]} -> {plan.new[:7]}")
+    if plan.reinstall:
+        typer.echo("Dependencies or commands changed; reinstalling with uv...")
+        self_update.reinstall(repo)
+        typer.echo("Reinstalled.")

@@ -13,7 +13,8 @@ from pathlib import Path
 from tavla.core.errors import GitError
 
 
-def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def run(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run ``git -C repo args...``; raise GitError with git's message on failure."""
     try:
         result = subprocess.run(
             ["git", "-C", str(repo), *args],
@@ -36,7 +37,7 @@ def is_repo(path: Path) -> bool:
 def init_repo(path: Path) -> None:
     """Initialise a git repo at ``path`` if one doesn't already exist."""
     if not is_repo(path):
-        _git(path, "init", "--quiet")
+        run(path, "init", "--quiet")
 
 
 def require_repo(path: Path) -> None:
@@ -47,7 +48,7 @@ def require_repo(path: Path) -> None:
 
 def is_clean(repo: Path) -> bool:
     """True if the work tree has no uncommitted changes (untracked files count)."""
-    return _git(repo, "status", "--porcelain").stdout.strip() == ""
+    return run(repo, "status", "--porcelain").stdout.strip() == ""
 
 
 def commit(repo: Path, message: str, paths: Iterable[Path | str] | None = None) -> bool:
@@ -57,18 +58,18 @@ def commit(repo: Path, message: str, paths: Iterable[Path | str] | None = None) 
     staged is left alone. Returns False if there was nothing to commit.
     """
     if paths is None:
-        _git(repo, "add", "--all")
+        run(repo, "add", "--all")
         pathspec: list[str] = []
     else:
         pathspec = ["--", *(str(p) for p in paths)]
         if len(pathspec) == 1:
             return False
-        _git(repo, "add", "--all", *pathspec)
+        run(repo, "add", "--all", *pathspec)
     staged = subprocess.run(
         ["git", "-C", str(repo), "diff", "--cached", "--quiet", *pathspec],
         check=False,
     )
     if staged.returncode == 0:
         return False
-    _git(repo, "commit", "--quiet", "-m", message, *pathspec)
+    run(repo, "commit", "--quiet", "-m", message, *pathspec)
     return True
