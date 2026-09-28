@@ -37,10 +37,25 @@ def _typer_docs() -> str:
     # Escape docstring lines like "#tags in the idea..." that Markdown would
     # otherwise read as headings.
     lines = []
+    in_examples = False
     for line in body.splitlines():
+        # An "Examples:" epilog (see tavla.cli.common.examples) runs until the
+        # next blank line; render it as a console block instead of a paragraph.
+        if line == "Examples:":
+            in_examples = True
+            lines += ["**Examples**:", "", "```console"]
+            continue
+        if in_examples:
+            if line:
+                lines.append(f"$ {line}")
+                continue
+            in_examples = False
+            lines.append("```")
         if line.startswith("#") and not HEADING.match(line):
             line = "\\" + line
         lines.append(line)
+    if in_examples:
+        lines.append("```")
     return "\n".join(lines)
 
 

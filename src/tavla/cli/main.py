@@ -8,23 +8,30 @@ from typing import Annotated
 import typer
 
 from tavla import __version__, config
-from tavla.cli import capture, goal, idea, overview, project, task
-from tavla.cli.common import State, handles_errors, state
-from tavla.core import bootstrap, migrate, self_update
+from tavla.cli import capture, deliverable, goal, idea, overview, project, task
+from tavla.cli.common import HELP_SETTINGS, State, examples, handles_errors, state
+from tavla.core import bootstrap, history, migrate, self_update
 
 app = typer.Typer(
     name="tavla",
     help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
     no_args_is_help=True,
+    context_settings=HELP_SETTINGS,
 )
-app.command("capture")(capture.capture)
-app.command("log")(capture.log)
-app.command("next")(overview.next_)
-app.command("status")(overview.status)
-app.add_typer(project.app, name="project")
-app.add_typer(goal.app, name="goal")
-app.add_typer(task.app, name="task")
-app.add_typer(idea.app, name="idea")
+
+DAILY = "Daily"
+ITEMS = "Projects and what's in them"
+SETUP = "Setup and maintenance"
+
+app.command("next", rich_help_panel=DAILY)(overview.next_)
+app.command("status", rich_help_panel=DAILY)(overview.status)
+app.command("capture", rich_help_panel=DAILY)(capture.capture)
+app.command("log", rich_help_panel=DAILY)(capture.log)
+app.add_typer(project.app, name="project", rich_help_panel=ITEMS)
+app.add_typer(goal.app, name="goal", rich_help_panel=ITEMS)
+app.add_typer(task.app, name="task", rich_help_panel=ITEMS)
+app.add_typer(idea.app, name="idea", rich_help_panel=ITEMS)
+app.add_typer(deliverable.app, name="deliverable", rich_help_panel=ITEMS)
 
 
 def _version_callback(value: bool) -> None:
@@ -53,7 +60,7 @@ def main(
     ctx.obj = State(content_dir, json_out, yes, verbose)
 
 
-@app.command()
+@app.command(rich_help_panel=SETUP)
 @handles_errors
 def init(
     ctx: typer.Context,
@@ -74,7 +81,7 @@ def init(
         typer.echo(f"Existing config left untouched: {config.config_path()}")
 
 
-@app.command("migrate")
+@app.command("migrate", rich_help_panel=SETUP)
 @handles_errors
 def migrate_(
     ctx: typer.Context,
@@ -110,10 +117,41 @@ def migrate_(
         typer.echo("Dry run: nothing written.")
         return
     migrate.apply(plan)
-    typer.echo("Done. Committed as one change; `git revert HEAD` in the content repo undoes it.")
+    typer.echo("Done. Committed as one change; `tavla undo` reverts it.")
 
 
-@app.command()
+@app.command(
+    rich_help_panel=DAILY,
+    epilog=examples(
+        "tv undo -n # show what would be undone",
+        "tv undo; tv undo # the last two changes",
+    ),
+)
+@handles_errors
+def undo(
+    ctx: typer.Context,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", "-n", help="Show what would be undone; change nothing.")
+    ] = False,
+    content_dir: Annotated[Path | None, typer.Option("--content-dir", hidden=True)] = None,
+) -> None:
+    """Undo the last change to the content repo (as a new commit, so nothing is lost).
+
+    Run it again to undo the change before that.
+    """
+    root = state(ctx, content_dir=content_dir).content().root
+    change = history.last_change(root)
+    if change is None:
+        typer.echo("Nothing to undo.")
+        return
+    typer.echo(f"{'Would undo' if dry_run else 'Undoing'}: {change.subject}  ({change.when})")
+    for f in change.files:
+        typer.echo(f"  {f}")
+    if not dry_run:
+        history.undo(root, change)
+
+
+@app.command(rich_help_panel=SETUP)
 @handles_errors
 def update(
     check: Annotated[

@@ -9,7 +9,7 @@ logs, and answers one question across all of them: *what should I work on next?*
 - **Plain text.** Everything is Markdown or YAML that you can read, grep and
   edit by hand. Nothing is locked in a database.
 - **Git is the history.** Every change tavla makes is committed to your content
-  repo automatically. `git log` is the audit trail and `git revert` is undo.
+  repo automatically. `git log` is the audit trail and `tavla undo` reverts the last change.
 - **Your data is separate.** Your content lives in its own private git repo,
   never in the software repo.
 - **CLI-first.** It's fast to type, and ids can be abbreviated. Tab-completion

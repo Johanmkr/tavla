@@ -11,10 +11,14 @@ from tavla.cli.common import (
     TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
+    TextArg,
+    YesOpt,
     complete_goal,
     complete_project,
+    drop_item,
     edit_until_valid,
     emit_json,
+    examples,
     fmt_date,
     handles_errors,
     item_changes,
@@ -31,7 +35,11 @@ app = typer.Typer(help="Goals: the outcomes a project works towards.", no_args_i
 GoalArg = Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_goal)]
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv goal add "Submit paper" -p thesis --due 15.12.2026 --priority high',
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,
@@ -125,7 +133,42 @@ def done(ctx: typer.Context, goal_id: GoalArg, content_dir: ContentDirOpt = None
         )
 
 
-@app.command("to-task")
+@app.command(epilog=examples('tv goal note write-intro "Advisor wants a shorter intro"'))
+@handles_errors
+def note(
+    ctx: typer.Context, goal_id: GoalArg, text: TextArg, content_dir: ContentDirOpt = None
+) -> None:
+    """Add a timestamped line to the goal's ## Updates section."""
+    content = state(ctx, content_dir=content_dir).content()
+    goal = content.goal(goal_id)
+    entry = ops.add_update(content, goal, " ".join(text))
+    typer.echo(f"Noted on {goal.id}: {entry.text}")
+
+
+@app.command()
+@handles_errors
+def drop(
+    ctx: typer.Context,
+    goal_id: GoalArg,
+    yes: YesOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Delete a goal (it stays in git history; `tv undo` brings it back).
+
+    Refused while tasks still belong to it.
+    """
+    st = state(ctx, content_dir=content_dir, yes=yes)
+    content = st.content()
+    drop_item(st, content, "goal", content.goal(goal_id))
+
+
+@app.command(
+    "to-task",
+    epilog=examples(
+        "tv goal to-task tidy-refs # loose task in the same project",
+        "tv goal to-task tidy-refs -g submit-paper",
+    ),
+)
 @handles_errors
 def to_task(
     ctx: typer.Context,

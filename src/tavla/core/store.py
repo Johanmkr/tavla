@@ -196,6 +196,9 @@ class Content:
             for path in sorted((p.path / DELIVERABLES_DIR).glob("*.y*ml"))
         ]
 
+    def deliverable(self, query: str) -> Deliverable:
+        return resolve_id(query, self.deliverables(), "deliverable")
+
     def log(self, project: Project) -> list[LogEntry]:
         path = project.path / LOG_FILE
         return parse_log(path.read_text()) if path.is_file() else []

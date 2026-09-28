@@ -11,11 +11,15 @@ from tavla.cli.common import (
     TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
+    TextArg,
+    YesOpt,
     complete_goal,
     complete_project,
     complete_task,
+    drop_item,
     edit_until_valid,
     emit_json,
+    examples,
     fmt_date,
     handles_errors,
     is_clear,
@@ -64,7 +68,12 @@ def _after_change(content: Content, task: Task, spec: str) -> list[str] | None:
     return deps or None
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv task add "Write intro" -g intro --due fri',
+        'tv task add "Fix plots" -p thesis --after write-intro --priority high',
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,
@@ -125,7 +134,14 @@ def _priority(value: str) -> Priority:
         raise typer.BadParameter(f"'{value}' is not one of {allowed}, none") from None
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        "tv task edit fix-plots --status blocked",
+        "tv task edit fix-plots --due none --tags +urgent,-later",
+        "tv task edit fix-plots --after +write-intro",
+        "tv task edit fix-plots # no options: open in $EDITOR",
+    )
+)
 @handles_errors
 def edit(
     ctx: typer.Context,
@@ -214,6 +230,111 @@ def done(ctx: typer.Context, task_id: TaskArg, content_dir: ContentDirOpt = None
         typer.echo(f"Now unblocked: {', '.join(unblocked)}")
 
 
+SubtaskRefs = Annotated[
+    list[str], typer.Argument(metavar="N|TEXT...", help="Subtask numbers, or text to match.")
+]
+
+
+def print_subtasks(task: Task) -> None:
+    typer.secho(f"{task.title} ({task.id})", bold=True)
+    if not task.subtasks:
+        typer.echo(f"  No subtasks. Add one: tv task subtask {task.id} TEXT")
+    for s in task.subtasks:
+        typer.echo(f"  {s.number:>2}. [{'x' if s.done else ' '}] {s.text}")
+
+
+def _set_subtasks(content: Content, task: Task, refs: list[str], *, done: bool) -> None:
+    subtasks = [ops.resolve_subtask(task, ref) for ref in refs]
+    edited = ops.check_subtasks(content, task, subtasks, done=done)
+    if edited is None:
+        typer.echo(f"Already {'checked' if done else 'unchecked'}.")
+        return
+    print_subtasks(edited)
+    if done and edited.subtasks_done == edited.subtasks_total and edited.status != TaskStatus.DONE:
+        typer.secho(
+            f"All subtasks done; close the task with: tv task done {edited.id}",
+            fg=typer.colors.GREEN,
+        )
+
+
+@app.command(
+    epilog=examples(
+        "tv task check draft-r # list the subtasks, numbered",
+        "tv task check draft-r 2 3",
+        'tv task check draft-r "two paragraphs" # by text',
+    )
+)
+@handles_errors
+def check(
+    ctx: typer.Context,
+    task_id: TaskArg,
+    refs: Annotated[
+        list[str] | None,
+        typer.Argument(
+            metavar="[N|TEXT]...", help="Subtask numbers, or text to match (none: list them)."
+        ),
+    ] = None,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Tick off subtasks. With none given, list them numbered."""
+    content = state(ctx, content_dir=content_dir).content()
+    task = content.task(task_id)
+    if not refs:
+        print_subtasks(task)
+        return
+    _set_subtasks(content, task, refs, done=True)
+
+
+@app.command()
+@handles_errors
+def uncheck(
+    ctx: typer.Context, task_id: TaskArg, refs: SubtaskRefs, content_dir: ContentDirOpt = None
+) -> None:
+    """Untick subtasks."""
+    content = state(ctx, content_dir=content_dir).content()
+    _set_subtasks(content, content.task(task_id), refs, done=False)
+
+
+@app.command(epilog=examples("tv task subtask draft-r Write the conclusion"))
+@handles_errors
+def subtask(
+    ctx: typer.Context, task_id: TaskArg, text: TextArg, content_dir: ContentDirOpt = None
+) -> None:
+    """Add a subtask (an unchecked item at the end of ## Subtasks)."""
+    content = state(ctx, content_dir=content_dir).content()
+    edited = ops.add_subtask(content, content.task(task_id), " ".join(text))
+    print_subtasks(edited)
+
+
+@app.command(epilog=examples('tv task note draft-r "Found two more MCMC papers"'))
+@handles_errors
+def note(
+    ctx: typer.Context, task_id: TaskArg, text: TextArg, content_dir: ContentDirOpt = None
+) -> None:
+    """Add a timestamped line to the task's ## Updates section."""
+    content = state(ctx, content_dir=content_dir).content()
+    task = content.task(task_id)
+    entry = ops.add_update(content, task, " ".join(text))
+    typer.echo(f"Noted on {task.id}: {entry.text}")
+
+
+@app.command()
+@handles_errors
+def drop(
+    ctx: typer.Context,
+    task_id: TaskArg,
+    yes: YesOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Delete a task (it stays in git history; `tv undo` brings it back).
+
+    Refused while other tasks depend on it.
+    """
+    st = state(ctx, content_dir=content_dir, yes=yes)
+    content = st.content()
+    drop_item(st, content, "task", content.task(task_id))
+
+
 def _sort_key(task: Task) -> tuple:
     # Priority first, then soonest due date (undated last), then id.
     return (task.priority.rank, task.due is None, task.due, task.id)
@@ -228,7 +349,14 @@ def status_label(task: Task) -> str:
     return f"{task.status}*" if task.is_waiting and task.status != TaskStatus.DONE else task.status
 
 
-@app.command("list")
+@app.command(
+    "list",
+    epilog=examples(
+        "tv task list -p thesis",
+        "tv task list -g intro --all",
+        "tv task list --status blocked --json",
+    ),
+)
 @handles_errors
 def list_(
     ctx: typer.Context,

@@ -52,6 +52,27 @@ tv goal done exp
 For any other status (`blocked`, or going back to `todo`), use
 `tv task edit ID --status STATUS`.
 
+## Subtasks and notes
+
+```sh
+tv task check pipeline          # list the subtasks, numbered
+tv task check pipeline 2        # tick one off (or give a piece of its text)
+tv task uncheck pipeline 2
+tv task subtask pipeline Add a smoke test
+tv task note pipeline "toy data works; real data OOMs"   # -> ## Updates
+```
+
+`note` is for what happened on this one task (it goes in the task file);
+`log` is for news about the whole project.
+
+## Mistakes
+
+```sh
+tv undo -n                      # what would be undone
+tv undo                         # revert the last change
+tv task drop scratch            # delete a task (asks first)
+```
+
 ## `log`: record progress
 
 ```console

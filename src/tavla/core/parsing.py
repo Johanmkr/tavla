@@ -90,10 +90,28 @@ def section_span(lines: list[str], heading: str, start: int = 0) -> tuple[int, i
     return (begin, len(lines)) if level is not None else None
 
 
-def _section_lines(body: str, heading: str) -> list[str]:
-    lines = body.splitlines()
-    span = section_span(lines, heading)
-    return lines[span[0] + 1 : span[1]] if span else []
+def checkbox_items(text: str, heading: str = SUBTASKS_HEADING) -> list[tuple[int, bool, str]]:
+    """Checkbox items under ``## <heading>`` as ``(line_index, done, text)``.
+
+    ``line_index`` indexes ``text.splitlines()`` (frontmatter included, if the
+    text has any), so callers can rewrite the line. Nested items count too;
+    items inside fenced code blocks don't.
+    """
+    lines = text.splitlines()
+    span = section_span(lines, heading, frontmatter_lines(text))
+    if span is None:
+        return []
+    items = []
+    in_code = False
+    for i in range(span[0] + 1, span[1]):
+        line = lines[i]
+        if line.lstrip().startswith(("```", "~~~")):
+            in_code = not in_code
+            continue
+        cb = None if in_code else _CHECKBOX_RE.match(line)
+        if cb:
+            items.append((i, cb.group(1) in "xX", line[cb.end() :].strip()))
+    return items
 
 
 def count_subtasks(body: str, heading: str = SUBTASKS_HEADING) -> tuple[int, int]:
@@ -101,18 +119,19 @@ def count_subtasks(body: str, heading: str = SUBTASKS_HEADING) -> tuple[int, int
 
     The section ends at the next heading of the same or higher level.
     """
-    done = total = 0
-    in_code = False
-    for line in _section_lines(body, heading):
-        if line.lstrip().startswith(("```", "~~~")):
-            in_code = not in_code
-            continue
-        cb = None if in_code else _CHECKBOX_RE.match(line)
-        if cb:
-            total += 1
-            if cb.group(1) in "xX":
-                done += 1
-    return done, total
+    items = checkbox_items(body, heading)
+    return sum(done for _, done, _ in items), len(items)
+
+
+def set_checkbox(text: str, index: int, done: bool) -> str:
+    """Tick (or untick) the checkbox on line ``index`` of ``text``."""
+    lines = text.splitlines(keepends=True)
+    cb = _CHECKBOX_RE.match(lines[index])
+    if cb is None:
+        raise ValidationError(f"line {index + 1} is not a checkbox item")
+    mark = "x" if done else " "
+    lines[index] = f"{lines[index][: cb.start(1)]}{mark}{lines[index][cb.end(1) :]}"
+    return "".join(lines)
 
 
 _BULLET_RE = re.compile(r"^[-*+]\s+(?:\[[ xX]\]\s+)?(.*\S)\s*$")

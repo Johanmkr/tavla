@@ -18,6 +18,7 @@ import yaml
 
 from tavla.core import bootstrap, dates, git_sync
 from tavla.core.entities import (
+    DELIVERABLES_DIR,
     GOALS_DIR,
     IDEAS_FILE,
     IDEAS_HEADING,
@@ -25,21 +26,29 @@ from tavla.core.entities import (
     PROJECT_FILE,
     SUBPROJECTS_DIR,
     TASKS_DIR,
+    UPDATES_HEADING,
+    Deliverable,
+    DeliverableKind,
+    DeliverableStatus,
     Goal,
     GoalStatus,
     LogEntry,
     Priority,
     Project,
     ProjectStatus,
+    Subtask,
     Task,
     TaskStatus,
 )
-from tavla.core.errors import ValidationError
+from tavla.core.errors import AmbiguousIdError, NotFoundError, ValidationError
 from tavla.core.parsing import (
     SUBTASKS_HEADING,
+    append_to_section,
+    checkbox_items,
     ensure_section,
     remove_frontmatter_key,
     remove_yaml_key,
+    set_checkbox,
     set_first_heading,
     set_frontmatter_key,
     set_yaml_key,
@@ -454,7 +463,7 @@ def goal_to_task(
     if under is not None:
         text = set_frontmatter_key(text, "goal", under.id)
     text = set_frontmatter_key(text, "updated", today or dates.local_today())
-    text = ensure_section(text, SUBTASKS_HEADING, before=(IDEAS_HEADING, "Updates"))
+    text = ensure_section(text, SUBTASKS_HEADING, before=(IDEAS_HEADING, UPDATES_HEADING))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     goal.path.unlink()
@@ -718,3 +727,190 @@ def complete(content: Content, item: Item, *, today: dt.date | None = None) -> I
 
 def start(content: Content, item: Item, *, today: dt.date | None = None) -> Item | None:
     return set_status(content, item, TaskStatus.DOING, verb="start", today=today)
+
+
+def drop(content: Content, item: Item | Deliverable) -> None:
+    """Delete a goal, task or deliverable file (it stays in git history).
+
+    Refused (see :func:`check_droppable`) while something points at it.
+    """
+    git_sync.require_repo(content.root)
+    check_droppable(content, item)
+    kind = "deliverable" if isinstance(item, Deliverable) else kind_of(item)
+    item.path.unlink()
+    content.refresh()
+    git_sync.commit(content.root, f"{kind}: drop {item.id}", [item.path])
+
+
+def check_droppable(content: Content, item: Item | Deliverable) -> None:
+    """Raise ValidationError if tasks still point at ``item``: tasks under a
+    goal, or tasks that depend on a task."""
+    if isinstance(item, Goal):
+        children = content.goal_tasks(item)
+        if children:
+            ids = ", ".join(t.id for t in children)
+            raise ValidationError(
+                f"goal '{item.id}' still has tasks ({ids}); move or drop them first"
+            )
+    elif isinstance(item, Task):
+        dependents = [t.id for t in content.tasks() if item.id in t.depends_on]
+        if dependents:
+            raise ValidationError(
+                f"tasks depend on '{item.id}' ({', '.join(dependents)}); "
+                "remove the dependency first"
+            )
+
+
+# --- subtasks & updates -----------------------------------------------------------
+
+
+def resolve_subtask(task: Task, ref: str) -> Subtask:
+    """A subtask by number (``2``) or by a unique piece of its text."""
+    ref = ref.strip()
+    if ref.isdigit():
+        n = int(ref)
+        if not 1 <= n <= len(task.subtasks):
+            raise NotFoundError(f"no subtask {n} in {task.id} (it has {len(task.subtasks)})")
+        return task.subtasks[n - 1]
+    matches = [s for s in task.subtasks if ref and ref.lower() in s.text.lower()]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        raise NotFoundError(f"no subtask in {task.id} matching '{ref}'")
+    raise AmbiguousIdError(ref, [f"{s.number}. {s.text}" for s in matches])
+
+
+def check_subtasks(
+    content: Content,
+    task: Task,
+    subtasks: Iterable[Subtask],
+    *,
+    done: bool = True,
+    today: dt.date | None = None,
+) -> Task | None:
+    """Tick (or with ``done=False`` untick) subtasks of ``task``.
+
+    Returns the updated task, or None if they were all already in that state.
+    """
+    git_sync.require_repo(content.root)
+    changed = {s.number: s for s in subtasks if s.done != done}
+    if not changed:
+        return None
+    text = task.path.read_text()
+    items = checkbox_items(text)
+    if len(items) != len(task.subtasks):
+        raise ValidationError(f"{task.path} changed on disk; try again")
+    for n in changed:
+        text = set_checkbox(text, items[n - 1][0], done)
+    task.path.write_text(set_frontmatter_key(text, "updated", today or dates.local_today()))
+    verb = "check" if done else "uncheck"
+    what = next(iter(changed.values())).text if len(changed) == 1 else f"{len(changed)} subtasks"
+    git_sync.commit(content.root, f"task: {verb} {task.id}: {summary(what)}", [task.path])
+    return _fresh(content, task)
+
+
+def add_subtask(content: Content, task: Task, text: str, *, today: dt.date | None = None) -> Task:
+    """Append an unchecked ``- [ ] text`` item to the task's ``## Subtasks``."""
+    git_sync.require_repo(content.root)
+    line = one_line(text, "subtask")
+    body = task.path.read_text()
+    body = ensure_section(body, SUBTASKS_HEADING, before=(IDEAS_HEADING, UPDATES_HEADING))
+    body = append_to_section(body, SUBTASKS_HEADING, f"- [ ] {line}")
+    task.path.write_text(set_frontmatter_key(body, "updated", today or dates.local_today()))
+    git_sync.commit(content.root, f"task: subtask {task.id}: {summary(line)}", [task.path])
+    return _fresh(content, task)
+
+
+def add_update(
+    content: Content, item: Item, text: str, *, now: dt.datetime | None = None
+) -> LogEntry:
+    """Append a timestamped ``- YYYY-MM-DD HH:MM: text`` line to the goal's or
+    task's ``## Updates`` section (created at the end if missing)."""
+    git_sync.require_repo(content.root)
+    line = one_line(text, "update")
+    now = now or dates.local_now()
+    body = append_to_section(
+        item.path.read_text(), UPDATES_HEADING, f"- {now:%Y-%m-%d %H:%M}: {line}"
+    )
+    item.path.write_text(set_frontmatter_key(body, "updated", now.date()))
+    git_sync.commit(content.root, f"{kind_of(item)}: note {item.id}: {summary(line)}", [item.path])
+    content.refresh()
+    return LogEntry(date=now.date(), time=now.time(), text=line)
+
+
+# --- deliverables -------------------------------------------------------------------
+
+
+def add_deliverable(
+    content: Content,
+    title: str,
+    project: Project,
+    *,
+    id: str | None = None,
+    kind: DeliverableKind = DeliverableKind.PAPER,
+    venue: str | None = None,
+    deadline: dt.date | None = None,
+    coauthors: Iterable[str] = (),
+) -> Deliverable:
+    git_sync.require_repo(content.root)
+    title = clean_title(title)
+    deliverable_id = _new_id(content, title, id)
+    path = project.path / DELIVERABLES_DIR / f"{deliverable_id}.yaml"
+    if path.exists():
+        raise ValidationError(f"file already exists: {path}")
+    fields: dict[str, Any] = {
+        "id": deliverable_id,
+        "title": title,
+        "kind": kind.value,
+        "status": DeliverableStatus.DRAFTING.value,
+    }
+    if venue:
+        fields["venue"] = " ".join(venue.split())
+    if deadline is not None:
+        fields["deadline"] = deadline
+    fields["coauthors"] = parse_tags(coauthors)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(_yaml_lines(fields))
+    git_sync.commit(content.root, f"deliverable: add {deliverable_id}", [path])
+    return content.deliverable(deliverable_id)
+
+
+def set_deliverable_fields(
+    content: Content, deliverable: Deliverable, changes: dict[str, Any]
+) -> Deliverable | None:
+    """Set top-level fields of a deliverable's YAML file. Returns None if nothing changed."""
+    git_sync.require_repo(content.root)
+    path = deliverable.path
+    original = path.read_text()
+    text = _apply_changes(original, changes, frontmatter=False)
+    if text == original:
+        return None
+    path.write_text(text)
+    try:
+        edited = Deliverable.load(path, deliverable.project)
+    except ValidationError:
+        path.write_text(original)
+        raise
+    git_sync.commit(
+        content.root, f"deliverable: edit {deliverable.id} ({', '.join(changes)})", [path]
+    )
+    return edited
+
+
+def finish_deliverable_edit(
+    content: Content, deliverable: Deliverable, session: EditSession
+) -> Deliverable | None:
+    """Validate and commit an edited deliverable file. Returns None if unchanged."""
+    if not session.changed():
+        return None
+    git_sync.require_repo(content.root)
+    edited = Deliverable.load(deliverable.path, deliverable.project)
+    content.refresh()
+    _check_unique(content, edited.id, deliverable.path)
+    _normalize_dates(deliverable.path, edited, ("deadline",), frontmatter=False)
+    git_sync.commit(
+        content.root,
+        _edit_message("deliverable", deliverable.id, edited.id),
+        [deliverable.path],
+    )
+    return Deliverable.load(deliverable.path, deliverable.project)

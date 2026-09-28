@@ -136,7 +136,7 @@ def test_cli_dry_run_then_apply(v1):
 
     result = runner.invoke(app, [*base, "migrate"])
     assert result.exit_code == 0, result.output
-    assert "git revert HEAD" in result.output
+    assert "tavla undo" in result.output
     assert "nothing to do" in runner.invoke(app, [*base, "migrate"]).output
     assert runner.invoke(app, [*base, "next"]).exit_code == 0
 
