@@ -25,6 +25,7 @@ dev = [
 
 [project.scripts]
 tavla = "tavla.cli.main:app"
+tv = "tavla.cli.main:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tavla"]

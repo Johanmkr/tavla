@@ -7,3 +7,5 @@ created: 2025-11-02
 ---
 
 # Write review draft
+
+## Ideas

@@ -54,10 +54,43 @@ def test_project_show(run):
     assert "First results" in result.output
 
 
+def test_project_show_lists_goals_loose_tasks_and_ideas(run):
+    out = run("project", "show", "project-a").output
+    assert "write-intro  [doing]  1/3 tasks" in out
+    assert "fix-plot-colors  [todo]  Fix plot colors  (no goal)" in out
+    assert "1. Adaptive step size" in out
+
+
 def test_project_show_json(run):
     data = json.loads(run("project", "show", "project-a", "--json").output)
     assert data["subprojects"] == ["ablations"]
-    assert {t["id"] for t in data["tasks"]} >= {"write-intro", "run-ablations"}
+    assert {g["id"] for g in data["goals"]} >= {"write-intro", "run-ablations"}
+    assert {t["id"] for t in data["tasks"]} >= {"draft-related-work", "fix-plot-colors"}
+    assert data["ideas"] == ["Adaptive step size based on the acceptance rate"]
+
+
+def test_goal_list(run):
+    result = run("goal", "list")
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()[1:]
+    assert [line.split()[0] for line in lines] == [
+        "write-intro",
+        "write-methods",
+        "run-ablations",
+        "write-review",
+    ]
+    assert "1/3" in lines[0]
+    assert "setup-env" in run("goal", "list", "--all").output
+
+
+def test_goal_show(run):
+    result = run("goal", "show", "write-i")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert "tasks:    1/3" in out
+    assert "[x] outline-structure" in out
+    assert "get-feedback-from-advisor  [todo]  Get feedback from advisor  (after draft" in out
+    assert "Open with the #mcmc failure case" in out  # body, including ## Ideas
 
 
 def test_task_list_sorted_and_hides_done(run):
@@ -65,15 +98,23 @@ def test_task_list_sorted_and_hides_done(run):
     assert result.exit_code == 0, result.output
     lines = result.output.splitlines()[1:]
     ids = [line.split()[0] for line in lines]
-    assert ids == ["write-intro", "write-methods", "run-ablations", "write-review"]
-    assert "1/3" in lines[0]
+    assert ids == [
+        "draft-related-work",
+        "get-feedback-from-advisor",
+        "wait-for-cluster-allocation",
+        "fix-plot-colors",
+    ]
+    assert "1/2" in lines[0] and "write-intro" in lines[0]
+    assert "todo*" in lines[1]  # waiting on a dependency
+    assert lines[3].split()[5] == "-"  # no goal
 
 
 def test_task_list_filters(run):
-    assert "setup-env" in run("task", "list", "--status", "done").output
-    assert "setup-env" in run("task", "list", "--all").output
-    out = run("task", "list", "--project", "project-b").output
-    assert "write-review" in out and "write-intro" not in out
+    assert "outline-structure" in run("task", "list", "--status", "done").output
+    assert "outline-structure" in run("task", "list", "--all").output
+    out = run("task", "list", "--goal", "write-i").output
+    assert "draft-related-work" in out and "fix-plot-colors" not in out
+    assert "No tasks." in run("task", "list", "--project", "project-b").output
 
 
 def test_task_list_invalid_status(run):
@@ -82,27 +123,32 @@ def test_task_list_invalid_status(run):
 
 
 def test_task_show_by_prefix(run):
-    result = run("task", "show", "write-i")
+    result = run("task", "show", "get-f")
     assert result.exit_code == 0, result.output
-    assert "Write introduction section" in result.output
-    assert "## Approach" not in result.output  # body shown verbatim, no invented sections
-    assert "Drafted outline" in result.output
+    out = result.output
+    assert "Get feedback from advisor" in out
+    assert "goal:     write-intro" in out
+    assert "priority: high (from goal)" in out
+    assert "after:    draft-related-work [todo]" in out
+    assert "## Instructions" in out
 
 
 def test_task_show_json_includes_body(run):
-    data = json.loads(run("task", "show", "write-intro", "--json").output)
-    assert data["subtasks_total"] == 3
+    data = json.loads(run("task", "show", "draft-related-work", "--json").output)
+    assert data["subtasks_total"] == 2
+    assert data["inherited"] == ["priority", "due"]
     assert "## Subtasks" in data["body"]
 
 
 def test_ambiguous_id_exit_code(run):
-    result = run("task", "show", "write-")
+    result = run("goal", "show", "write-")
     assert result.exit_code == EXIT_INVALID
     assert "write-intro" in result.output and "write-methods" in result.output
 
 
 def test_not_found_exit_code(run):
     assert run("task", "show", "nope").exit_code == EXIT_NOT_FOUND
+    assert run("goal", "show", "nope").exit_code == EXIT_NOT_FOUND
     assert run("project", "show", "nope").exit_code == EXIT_NOT_FOUND
 
 
@@ -125,6 +171,8 @@ def test_content_dir_accepted_after_command(basic_content):
     for args in (
         ["task", "list"],
         ["project", "show", "project-a"],
+        ["goal", "list"],
+        ["idea", "list"],
         ["next"],
         ["status"],
     ):
@@ -138,7 +186,14 @@ def test_content_dir_after_command_overrides_global(basic_content, tmp_path):
         ["--content-dir", str(tmp_path), "task", "list", "--content-dir", str(basic_content)],
     )
     assert result.exit_code == 0, result.output
-    assert "write-intro" in result.output
+    assert "draft-related-work" in result.output
+
+
+def test_old_layout_asks_for_migrate(content_copy):
+    (content_copy / "tavla.yaml").unlink()
+    result = runner.invoke(app, ["--content-dir", str(content_copy), "task", "list"])
+    assert result.exit_code == EXIT_ERROR
+    assert "tavla migrate" in result.output
 
 
 def test_content_dir_option_is_hidden_on_subcommands():

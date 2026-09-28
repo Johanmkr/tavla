@@ -39,25 +39,37 @@ def test_relative(date, expected):
 def test_next(run):
     result = run("next")
     assert result.exit_code == 0, result.output
-    rows = result.output.splitlines()[1:]
-    assert [r.split()[0] for r in rows] == ["write-intro", "write-methods"]
-    assert "(in 6d)" in rows[0] and "1/3" in rows[0]
+    lines = result.output.splitlines()
+    rows = lines[1:4]
+    assert [r.split()[0] for r in rows] == [
+        "draft-related-work",
+        "wait-for-cluster-allocation",
+        "fix-plot-colors",
+    ]
+    assert "(in 6d)" in rows[0] and "1/2" in rows[0] and "write-intro" in rows[0]
+    assert "get-feedback" not in result.output  # waiting on draft-related-work
+    assert "Goals with no tasks yet (1)" in result.output
+    assert "write-methods  [med]  [project-a]  Write methods section  due 2026-10-15" in (
+        result.output
+    )
 
 
 def test_next_limit(run):
     result = run("next", "-n", "1")
-    assert "write-methods" not in result.output
-    assert "1 more" in result.output
+    assert "fix-plot-colors" not in result.output
+    assert "2 more" in result.output
 
 
 def test_next_filters(run):
-    assert "write-methods" not in run("next", "--priority", "high").output
-    assert "write-review" in run("next", "-p", "project-b").output
+    assert "fix-plot-colors" not in run("next", "--priority", "med").output
+    out = run("next", "-p", "project-b").output
+    assert "No open tasks." in out and "write-review" in out
 
 
 def test_next_json(run):
     data = json.loads(run("next", "--json").output)
-    assert [t["id"] for t in data] == ["write-intro", "write-methods"]
+    assert data["tasks"][0]["id"] == "draft-related-work"
+    assert [g["id"] for g in data["goals_without_tasks"]] == ["write-methods"]
 
 
 def test_next_nothing(run):
@@ -69,11 +81,13 @@ def test_status(run):
     assert result.exit_code == 0, result.output
     out = result.output
     assert "tavla status — 2026-09-25" in out
-    assert "2 active projects · 2 open tasks (1 doing) · 1 blocked" in out
+    assert "2 active projects · 4 open tasks (0 doing) · 0 blocked" in out
     assert "ablations  last activity 2026-08-01 (55d ago)" in out
-    assert "run-ablations" in out
-    assert "write-intro  2026-10-01 (in 6d)" in out
+    assert "get-feedback-from-advisor  [project-a]  Get feedback from advisor  (after draft" in out
+    assert "write-intro  2026-10-01 (in 6d)  [project-a]  1/3 tasks" in out
+    assert "draft-related-work  2026-10-01 (in 6d)" in out
     assert "Deliverable deadlines within 30 days (0)" in out
+    assert "2 ideas in the inbox" in out
 
 
 def test_status_deadline_days(run):
@@ -84,4 +98,5 @@ def test_status_json(run):
     data = json.loads(run("status", "--json").output)
     assert data["today"] == "2026-09-25"
     assert data["stale"][0]["project"]["id"] == "ablations"
-    assert data["blocked"][0]["id"] == "run-ablations"
+    assert data["waiting"][0]["id"] == "get-feedback-from-advisor"
+    assert data["inbox"] == 2

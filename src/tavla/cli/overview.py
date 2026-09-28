@@ -13,6 +13,7 @@ from tavla.cli.common import (
     complete_project,
     emit_json,
     handles_errors,
+    progress,
     state,
     table,
 )
@@ -63,20 +64,32 @@ def next_(
     json_out: JsonOpt = False,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """What to work on next: open tasks across active projects, most important first."""
+    """What to work on next: open tasks across active projects, most important first.
+
+    Tasks waiting on unfinished dependencies are left out. Goals that have no
+    tasks yet are listed after the tasks.
+    """
     st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     project = content.project(project_id) if project_id else None
     tasks = queries.next_tasks(content, project=project, min_priority=priority)
+    goals = queries.goals_without_tasks(content, project=project, min_priority=priority)
     shown = tasks[:limit] if limit else tasks
 
     if st.json:
-        emit_json(to_dict(shown, content.root, exclude=("meta", "body")))
+        emit_json(
+            {
+                "tasks": to_dict(shown, content.root, exclude=("meta", "body")),
+                "goals_without_tasks": to_dict(goals, content.root, exclude=("meta", "body")),
+            }
+        )
         return
-    if not shown:
+    if not shown and not goals:
         typer.echo("Nothing to do.")
         return
     today = dates.local_today()
+    if not shown:
+        typer.echo("No open tasks.")
     table(
         [
             [
@@ -85,15 +98,21 @@ def next_(
                 t.status,
                 relative(t.due, today),
                 subtask_progress(t),
+                t.goal or "-",
                 t.project,
                 t.title,
             ]
             for t in shown
         ],
-        ["ID", "PRIORITY", "STATUS", "DUE", "SUBTASKS", "PROJECT", "TITLE"],
+        ["ID", "PRIORITY", "STATUS", "DUE", "SUBTASKS", "GOAL", "PROJECT", "TITLE"],
     )
     if len(shown) < len(tasks):
         typer.secho(f"… and {len(tasks) - len(shown)} more (use -n 0 for all)", dim=True)
+    if goals:
+        _heading("Goals with no tasks yet", len(goals))
+        for g in goals:
+            due = f"  due {relative(g.due, today)}" if g.due else ""
+            typer.echo(f"  {g.id}  [{g.priority}]  [{g.project}]  {g.title}{due}")
 
 
 @handles_errors
@@ -137,10 +156,29 @@ def status(
         since = f"since {t.updated}" if t.updated else ""
         typer.echo(f"  {t.id}  [{t.project}]  {t.title}  {since}".rstrip())
 
+    _heading("Waiting on dependencies", len(report.waiting))
+    for t in report.waiting:
+        typer.echo(f"  {t.id}  [{t.project}]  {t.title}  (after {', '.join(t.waiting_on)})")
+
+    _heading(f"Goals due within {queries.DEFAULT_TASK_DUE_DAYS} days", len(report.due_goals))
+    for g in report.due_goals:
+        typer.echo(
+            f"  {g.id}  {relative(g.due, today)}  [{g.project}]  "
+            f"{progress(g.tasks_done, g.tasks_total)} tasks  {g.title}"
+        )
+
     _heading(f"Tasks due within {queries.DEFAULT_TASK_DUE_DAYS} days", len(report.due_tasks))
     for t in report.due_tasks:
         typer.echo(f"  {t.id}  {relative(t.due, today)}  [{t.project}]  {t.title}")
 
+    if report.goals_ready:
+        _heading("Goals with all tasks done (close them?)", len(report.goals_ready))
+        for g in report.goals_ready:
+            typer.echo(f"  {g.id}  [{g.project}]  {g.title}")
+
     _heading(f"Deliverable deadlines within {deadline_days} days", len(report.deadlines))
     for d in report.deadlines:
         typer.echo(f"  {d.id}  {relative(d.deadline, today)}  [{d.project}]  {d.status}  {d.title}")
+
+    if report.inbox:
+        typer.echo(f"\n{plural(report.inbox, 'idea')} in the inbox (tavla idea list)")

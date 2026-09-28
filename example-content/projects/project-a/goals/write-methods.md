@@ -9,3 +9,5 @@ due: 2026-10-15
 ---
 
 # Write methods section
+
+## Ideas

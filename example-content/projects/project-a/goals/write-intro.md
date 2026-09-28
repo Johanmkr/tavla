@@ -15,10 +15,9 @@ due: 2026-10-01
 Free text the parser ignores.
 - [ ] this checkbox is not a subtask
 
-## Subtasks
-- [x] Outline structure
-- [ ] Draft related work
-- [ ] Get feedback from advisor
+## Ideas
+- Open with the #mcmc failure case
+- Mention the toy model
 
 ## Updates
 - 2026-09-15: Drafted outline

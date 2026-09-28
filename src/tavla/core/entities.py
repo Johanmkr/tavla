@@ -14,7 +14,7 @@ from enum import Enum, StrEnum
 from pathlib import Path
 from typing import Any, TypeVar
 
-from tavla.core import parsing
+from tavla.core import dates, parsing
 from tavla.core.errors import ValidationError
 
 
@@ -43,6 +43,10 @@ class TaskStatus(StrEnum):
     DOING = "doing"
     BLOCKED = "blocked"
     DONE = "done"
+
+
+# Goals move through the same lifecycle as tasks.
+GoalStatus = TaskStatus
 
 
 class DeliverableKind(StrEnum):
@@ -96,11 +100,16 @@ def _date(value: Any, name: str, path: Path) -> dt.date | None:
         return value.date()
     if isinstance(value, dt.date):
         return value
+    text = str(value).strip()
     try:
-        return dt.date.fromisoformat(str(value).strip())
-    except ValueError:
+        # Hand-edited files may use day-first dates, but they must include a
+        # year (a yearless date would drift); edits get rewritten to ISO.
+        if dates.DMY_WITH_YEAR_RE.match(text):
+            return dates.parse_dmy(text)
+        return dt.date.fromisoformat(text)
+    except (ValueError, ValidationError):
         raise ValidationError(
-            f"{path}: invalid {name} date '{value}' (expected YYYY-MM-DD)"
+            f"{path}: invalid {name} date '{value}' (expected YYYY-MM-DD or DD.MM.YYYY)"
         ) from None
 
 
@@ -121,12 +130,14 @@ def _opt_str(value: Any) -> str | None:
 # --- entities ---------------------------------------------------------------
 
 PROJECT_FILE = "project.yaml"
+GOALS_DIR = "goals"
 TASKS_DIR = "tasks"
 DELIVERABLES_DIR = "deliverables"
 SUBPROJECTS_DIR = "subprojects"
 LOG_FILE = "log.md"
 IDEAS_FILE = "ideas.md"
 REFERENCES_FILE = "references.yaml"
+IDEAS_HEADING = "Ideas"
 
 
 @dataclass
@@ -170,21 +181,79 @@ class Project:
 
 
 @dataclass
-class Task:
+class Goal:
+    """An outcome within a project (``goals/<id>.md``), achieved through tasks."""
+
     id: str
     project: str
     title: str
-    status: TaskStatus
+    status: GoalStatus
     priority: Priority
     path: Path  # the .md file
     tags: list[str] = field(default_factory=list)
     created: dt.date | None = None
     updated: dt.date | None = None
     due: dt.date | None = None
-    subtasks_done: int = 0
-    subtasks_total: int = 0
+    # Filled in by the store from the tasks pointing at this goal.
+    tasks_done: int = 0
+    tasks_total: int = 0
     body: str = field(default="", repr=False)
     meta: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @classmethod
+    def load(cls, path: Path, project: str) -> Goal:
+        """Load a goal file. ``project`` comes from the containing directory."""
+        meta, body = parsing.read_markdown(path)
+        id_ = _require_id(meta, path)
+        return cls(
+            id=id_,
+            project=project,
+            title=parsing.first_heading(body) or str(meta.get("title") or id_),
+            status=_enum(GoalStatus, meta.get("status"), "status", path, GoalStatus.TODO),
+            priority=_enum(Priority, meta.get("priority"), "priority", path, Priority.MED),
+            path=path,
+            tags=_str_list(meta.get("tags"), "tags", path),
+            created=_date(meta.get("created"), "created", path),
+            updated=_date(meta.get("updated"), "updated", path),
+            due=_date(meta.get("due"), "due", path),
+            body=body,
+            meta=meta,
+        )
+
+
+@dataclass
+class Task:
+    """A unit of work (``tasks/<id>.md``), optionally under a goal, with a
+    ``## Subtasks`` checklist and optional dependencies on other tasks.
+
+    ``priority`` and ``due`` are *effective* values: when the file doesn't set
+    them, the store fills them in from the task's goal and lists the field in
+    ``inherited``.
+    """
+
+    id: str
+    project: str
+    title: str
+    status: TaskStatus
+    priority: Priority
+    path: Path  # the .md file
+    goal: str | None = None
+    depends_on: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    created: dt.date | None = None
+    updated: dt.date | None = None
+    due: dt.date | None = None
+    subtasks_done: int = 0
+    subtasks_total: int = 0
+    # Filled in by the store: unfinished dependencies, and inherited fields.
+    waiting_on: list[str] = field(default_factory=list)
+    inherited: list[str] = field(default_factory=list)
+    body: str = field(default="", repr=False)
+    meta: dict[str, Any] = field(default_factory=dict, repr=False)
+
+    @property
+    def is_waiting(self) -> bool:
+        return bool(self.waiting_on)
 
     @classmethod
     def load(cls, path: Path, project: str) -> Task:
@@ -194,6 +263,9 @@ class Task:
         meta, body = parsing.read_markdown(path)
         id_ = _require_id(meta, path)
         done, total = parsing.count_subtasks(body)
+        depends_on = _str_list(meta.get("depends_on"), "depends_on", path)
+        if id_ in depends_on:
+            raise ValidationError(f"{path}: task can't depend on itself")
         return cls(
             id=id_,
             project=project,
@@ -201,6 +273,8 @@ class Task:
             status=_enum(TaskStatus, meta.get("status"), "status", path, TaskStatus.TODO),
             priority=_enum(Priority, meta.get("priority"), "priority", path, Priority.MED),
             path=path,
+            goal=_opt_str(meta.get("goal")) or None,
+            depends_on=depends_on,
             tags=_str_list(meta.get("tags"), "tags", path),
             created=_date(meta.get("created"), "created", path),
             updated=_date(meta.get("updated"), "updated", path),
@@ -302,11 +376,23 @@ class LogEntry:
     time: dt.time | None = None
 
 
+_TAG_RE = re.compile(r"(?<![\w#])#([\w][\w-]*)")
+
+
 @dataclass
 class Idea:
-    """One unstructured line from ``inbox.md`` or a project's ``ideas.md``."""
+    """One unstructured line: from ``inbox.md``, a project's ``ideas.md``, or
+    the ``## Ideas`` section of a goal or task. ``#words`` in the text are tags.
+    """
 
     text: str
+
+    @property
+    def tags(self) -> list[str]:
+        return list(dict.fromkeys(_TAG_RE.findall(self.text)))
+
+    def text_without_tags(self) -> str:
+        return " ".join(_TAG_RE.sub("", self.text).split())
 
 
 # --- line-oriented files ----------------------------------------------------
@@ -335,14 +421,21 @@ def parse_log(text: str) -> list[LogEntry]:
 _BULLET_RE = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?")
 
 
+_MD_HEADING_RE = re.compile(r"^\s*#{1,6}(?:\s|$)")
+
+
+def idea_lines(text: str) -> list[tuple[int, str]]:
+    """``(line_index, text)`` for each non-blank, non-heading line (bullet stripped)."""
+    return [
+        (i, _BULLET_RE.sub("", line).strip())
+        for i, line in enumerate(text.splitlines())
+        if line.strip() and not _MD_HEADING_RE.match(line)
+    ]
+
+
 def parse_ideas(text: str) -> list[Idea]:
     """Each non-blank, non-heading line is one idea (leading bullet stripped)."""
-    ideas = []
-    for line in text.splitlines():
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
-        ideas.append(Idea(_BULLET_RE.sub("", line).strip()))
-    return ideas
+    return [Idea(t) for _, t in idea_lines(text)]
 
 
 def parse_references(data: Any, path: Path) -> list[Reference]:

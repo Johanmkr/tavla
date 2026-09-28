@@ -74,13 +74,24 @@ TODAY = dt.date(2026, 9, 25)  # a Friday
         ("+2w", dt.date(2026, 10, 9)),
         ("mon", dt.date(2026, 9, 28)),
         ("friday", dt.date(2026, 10, 2)),  # next Friday, never today
+        ("01.10.2026", dt.date(2026, 10, 1)),
+        ("1/10/2026", dt.date(2026, 10, 1)),
+        ("01-10-2026", dt.date(2026, 10, 1)),
+        ("01.10.26", dt.date(2026, 10, 1)),
+        ("31/12/26", dt.date(2026, 12, 31)),
+        ("5-3-27", dt.date(2027, 3, 5)),
+        ("01.10", dt.date(2026, 10, 1)),  # no year: next occurrence
+        ("25.09", TODAY),  # ... which may be today
+        ("01.02", dt.date(2027, 2, 1)),  # ... or next year
     ],
 )
 def test_parse_date(value, expected):
     assert parse_date(value, TODAY) == expected
 
 
-@pytest.mark.parametrize("value", ["soon", "2026-13-01", "+3x", "mo"])
+@pytest.mark.parametrize(
+    "value", ["soon", "2026-13-01", "+3x", "mo", "31.02.2026", "01.13.26", "01.10/2026", "1.10.202"]
+)
 def test_parse_date_invalid(value):
     with pytest.raises(ValidationError):
         parse_date(value, TODAY)

@@ -12,3 +12,8 @@
 - Tests run against `tmp_path` or `tests/fixtures/` — never a real content repo,
   and never with personal data. `tests/conftest.py` isolates `HOME`, XDG dirs
   and git identity automatically.
+- Changing the on-disk layout means bumping `SCHEMA_VERSION` in
+  `tavla.core.bootstrap` and adding a step to `tavla.core.migrate`, so existing
+  content repos can be upgraded with `tavla migrate`. `tests/fixtures/v1` keeps
+  a copy of the oldest layout for the migration tests; `tests/fixtures/basic`
+  and `example-content/` are always at the current layout.

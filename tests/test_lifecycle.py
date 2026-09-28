@@ -1,4 +1,4 @@
-"""Milestone 5: capture, log, task done — core ops and CLI."""
+"""Capture, log, and the goal/task lifecycle (start, done) — core ops and CLI."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tavla.cli.main import app
-from tavla.core import ops
+from tavla.core import ideas, ops
 from tavla.core.entities import TaskStatus
 from tavla.core.errors import EXIT_INVALID, EXIT_NOT_FOUND, ValidationError
 from tavla.core.store import Content
@@ -42,11 +42,15 @@ def _clean(git, repo) -> bool:
     return git(repo, "status", "--porcelain") == ""
 
 
+def _capture(content, text):
+    return ideas.add(content, ideas.scope_of(content, None), text)
+
+
 # --- capture -------------------------------------------------------------------
 
 
 def test_capture_appends_and_commits(content, git):
-    ops.capture(content, "  Try\n  tempering   ")
+    _capture(content, "  Try\n  tempering   ")
     assert (
         (content.root / "inbox.md")
         .read_text()
@@ -59,19 +63,19 @@ def test_capture_appends_and_commits(content, git):
 
 def test_capture_handles_missing_trailing_newline(content):
     (content.root / "inbox.md").write_text("# Inbox\n- a")
-    ops.capture(content, "b")
+    _capture(content, "b")
     assert (content.root / "inbox.md").read_text() == "# Inbox\n- a\n- b\n"
 
 
 def test_capture_recreates_missing_inbox(content):
     (content.root / "inbox.md").unlink()
-    ops.capture(content, "x")
+    _capture(content, "x")
     assert (content.root / "inbox.md").read_text() == "# Inbox\n\n- x\n"
 
 
 def test_capture_long_text_truncated_in_commit_only(content, git):
     text = "word " * 30
-    ops.capture(content, text)
+    _capture(content, text)
     subject = _head(git, content.root)
     assert subject.endswith("…") and len(subject) <= len("inbox: capture ") + 50
     assert text.strip() in (content.root / "inbox.md").read_text()
@@ -79,7 +83,7 @@ def test_capture_long_text_truncated_in_commit_only(content, git):
 
 def test_capture_empty_rejected(content):
     with pytest.raises(ValidationError):
-        ops.capture(content, "   ")
+        _capture(content, "   ")
 
 
 def test_cli_capture_joins_words(run, git_content, git):
@@ -135,16 +139,16 @@ def test_cli_log_requires_text(run):
     assert run("log", "project-a").exit_code != 0
 
 
-# --- task done -------------------------------------------------------------------
+# --- done -----------------------------------------------------------------------
 
 
-def test_complete_task_edits_only_status_and_updated(content, git):
-    task = content.task("write-intro")
-    before = task.path.read_text()
-    done = ops.complete_task(content, task, today=TODAY)
+def test_complete_edits_only_status_and_updated(content, git):
+    goal = content.goal("write-intro")
+    before = goal.path.read_text()
+    done = ops.complete(content, goal, today=TODAY)
     assert done.status == TaskStatus.DONE
     assert done.updated == TODAY
-    after = task.path.read_text()
+    after = goal.path.read_text()
     changed = [
         (a, b) for a, b in zip(before.splitlines(), after.splitlines(), strict=True) if a != b
     ]
@@ -152,45 +156,57 @@ def test_complete_task_edits_only_status_and_updated(content, git):
         ("status: doing", "status: done"),
         ("updated: 2026-09-20", "updated: 2026-09-25"),
     ]
-    assert _head(git, content.root) == "task: done write-intro"
+    assert _head(git, content.root) == "goal: done write-intro"
     assert _clean(git, content.root)
 
 
-def test_complete_task_already_done_is_noop(content, git):
-    assert ops.complete_task(content, content.task("setup-env"), today=TODAY) is None
+def test_complete_already_done_is_noop(content, git):
+    assert ops.complete(content, content.task("outline-structure"), today=TODAY) is None
     assert _head(git, content.root) == "initial"
 
 
-def test_done_task_leaves_next(content):
+def test_done_task_leaves_next_and_unblocks_dependents(content):
     from tavla.core import queries
 
-    ops.complete_task(content, content.task("write-intro"), today=TODAY)
-    assert "write-intro" not in [t.id for t in queries.next_tasks(content)]
+    ops.complete(content, content.task("draft-related-work"), today=TODAY)
+    ids = [t.id for t in queries.next_tasks(content)]
+    assert "draft-related-work" not in ids
+    assert "get-feedback-from-advisor" in ids
 
 
 def test_cli_task_done(run, git_content, git):
-    result = run("task", "done", "write-i")
+    result = run("task", "done", "draft-r")
     assert result.exit_code == 0, result.output
-    assert "Done: write-intro (Write introduction section)" in result.output
-    assert "2 of 3 subtasks were still unchecked" in result.output
-    assert _head(git, git_content) == "task: done write-intro"
+    assert "Done: draft-related-work (Draft related work)" in result.output
+    assert "1 of 2 subtasks were still unchecked" in result.output
+    assert "Now unblocked: get-feedback-from-advisor" in result.output
+    assert _head(git, git_content) == "task: done draft-related-work"
 
 
 def test_cli_task_done_twice(run):
-    run("task", "done", "write-intro")
-    result = run("task", "done", "write-intro")
+    run("task", "done", "fix-plot-colors")
+    result = run("task", "done", "fix-plot-colors")
     assert result.exit_code == 0
     assert "already done" in result.output
 
 
-def test_cli_task_done_ambiguous(run):
-    assert run("task", "done", "write-").exit_code == EXIT_INVALID
+def test_cli_task_done_ambiguous(run, git_content):
+    run("task", "add", "Fix tests", "-p", "project-a")
+    assert run("task", "done", "fix-").exit_code == EXIT_INVALID
 
 
-# --- the Tier 1 definition of done, end to end ------------------------------------
+def test_cli_goal_done_warns_about_open_tasks(run, git_content, git):
+    result = run("goal", "done", "write-i")
+    assert result.exit_code == 0, result.output
+    assert "Done: write-intro (Write introduction section)" in result.output
+    assert "2 of 3 tasks are not done" in result.output
+    assert _head(git, git_content) == "goal: done write-intro"
 
 
-def test_tier1_end_to_end(tmp_path, git):
+# --- the definition of done, end to end -------------------------------------------
+
+
+def test_end_to_end(tmp_path, git):
     content = tmp_path / "c"
 
     def tavla(*args):
@@ -199,49 +215,132 @@ def test_tier1_end_to_end(tmp_path, git):
         return result.output
 
     tavla("init")
-    tavla("capture", "idea: adaptive tempering")
+    tavla("capture", "idea: adaptive tempering #mcmc")
     tavla("project", "add", "Thesis", "--priority", "high")
-    tavla("task", "add", "Draft chapter 1", "-p", "thesis", "--priority", "high", "--id", "ch1")
-    tavla("task", "add", "Draft chapter 2", "-p", "thesis", "--id", "ch2")
-    assert tavla("next").splitlines()[1].startswith("ch1")
+    tavla("goal", "add", "Chapter 1", "-p", "thesis", "--priority", "high", "--id", "ch1")
+    tavla("task", "add", "Outline", "-g", "ch1", "--id", "outline")
+    tavla("task", "add", "Draft", "-g", "ch1", "--id", "draft", "--after", "out")
+    tavla("task", "add", "Renew library card", "-p", "thesis", "--priority", "low", "--id", "card")
+    assert [line.split()[0] for line in tavla("next").splitlines()[1:3]] == ["outline", "card"]
     tavla("log", "thesis", "outline agreed with advisor")
-    tavla("task", "done", "ch1")
-    assert [line.split()[0] for line in tavla("next").splitlines()[1:]] == ["ch2"]
+    tavla("task", "done", "outline")
+    assert tavla("next").splitlines()[1].startswith("draft")
+    tavla("idea", "promote", "tempering", "-g", "ch1")
+    assert Content.open(content).task("idea-adaptive-tempering").tags == ["mcmc"]
     assert git(content, "log", "--format=%s").splitlines() == [
-        "task: done ch1",
+        "task: add idea-adaptive-tempering",
+        "task: done outline",
         "log: thesis: outline agreed with advisor",
-        "task: add ch2",
-        "task: add ch1",
+        "task: add card",
+        "task: add draft",
+        "task: add outline",
+        "goal: add ch1",
         "project: add thesis",
-        "inbox: capture idea: adaptive tempering",
+        "inbox: capture idea: adaptive tempering #mcmc",
         "init: content repo",
     ]
     assert git(content, "status", "--porcelain") == ""
 
 
-# --- task start ------------------------------------------------------------------
+# --- start -----------------------------------------------------------------------
 
 
-def test_start_task(content, git):
-    started = ops.start_task(content, content.task("write-methods"), today=TODAY)
+def test_start(content, git):
+    started = ops.start(content, content.goal("write-methods"), today=TODAY)
     assert (started.status, started.updated) == (TaskStatus.DOING, TODAY)
-    assert _head(git, content.root) == "task: start write-methods"
+    assert _head(git, content.root) == "goal: start write-methods"
     assert _clean(git, content.root)
 
 
 def test_start_already_doing_is_noop(content, git):
-    assert ops.start_task(content, content.task("write-intro"), today=TODAY) is None
+    assert ops.start(content, content.goal("write-intro"), today=TODAY) is None
     assert _head(git, content.root) == "initial"
 
 
 def test_cli_task_start(run, git_content, git):
-    result = run("task", "start", "write-m")
+    result = run("task", "start", "fix-p")
     assert result.exit_code == 0, result.output
-    assert "Started: write-methods (Write methods section) — was todo" in result.output
-    assert "already in progress" in run("task", "start", "write-m").output
+    assert "Started: fix-plot-colors (Fix plot colors) — was todo" in result.output
+    assert "already in progress" in run("task", "start", "fix-p").output
+
+
+def test_cli_task_start_warns_when_waiting(run):
+    result = run("task", "start", "get-f")
+    assert result.exit_code == 0, result.output
+    assert "still waiting on draft-related-work" in result.output
 
 
 def test_cli_start_reopens_done_task(run, git_content):
-    result = run("task", "start", "setup-env")
+    result = run("task", "start", "outline-structure")
     assert "was done" in result.output
-    assert Content.open(git_content).task("setup-env").status == TaskStatus.DOING
+    assert Content.open(git_content).task("outline-structure").status == TaskStatus.DOING
+
+
+def test_cli_goal_start(run, git_content):
+    result = run("goal", "start", "write-m")
+    assert "Started: write-methods (Write methods section) — was todo" in result.output
+
+
+# --- goal to-task ------------------------------------------------------------------
+
+
+def test_goal_to_task_loose(content, git):
+    goal = content.goal("write-methods")
+    old_text = goal.path.read_text()
+    task = ops.goal_to_task(content, goal, today=TODAY)
+    assert (task.id, task.goal, task.project, task.status, task.due) == (
+        "write-methods",
+        None,
+        "project-a",
+        "todo",
+        dt.date(2026, 10, 15),
+    )
+    assert task.path == content.root / "projects/project-a/tasks/write-methods.md"
+    assert not goal.path.exists()
+    text = task.path.read_text()
+    assert "## Subtasks\n\n## Ideas" in text
+    assert old_text.split("---\n")[2].strip() in text.replace("## Subtasks\n\n", "")
+    assert "write-methods" not in [g.id for g in content.goals()]
+    assert _head(git, content.root) == "goal: to-task write-methods"
+    assert _clean(git, content.root)
+
+
+def test_goal_to_task_under_other_goal(content, git):
+    task = ops.goal_to_task(
+        content, content.goal("write-methods"), under=content.goal("write-intro"), today=TODAY
+    )
+    assert task.goal == "write-intro"
+    assert content.goal("write-intro").tasks_total == 4
+    assert _head(git, content.root) == "goal: to-task write-methods under write-intro"
+
+
+def test_goal_to_task_refused_while_it_has_tasks(content, git):
+    with pytest.raises(ValidationError, match="still has tasks"):
+        ops.goal_to_task(content, content.goal("write-intro"))
+    assert content.goal("write-intro").path.exists()
+    assert _head(git, content.root) == "initial"
+
+
+def test_goal_to_task_under_goal_in_other_project_refused(content):
+    with pytest.raises(ValidationError, match="is in project"):
+        ops.goal_to_task(content, content.goal("write-methods"), under=content.goal("write-review"))
+
+
+def test_goal_to_task_under_itself_restores(content, git):
+    goal = content.goal("write-methods")
+    before = goal.path.read_text()
+    with pytest.raises(ValidationError, match="unknown goal"):
+        ops.goal_to_task(content, goal, under=goal)
+    assert goal.path.read_text() == before
+    assert not (content.root / "projects/project-a/tasks/write-methods.md").exists()
+    assert _clean(git, content.root)
+
+
+def test_cli_goal_to_task(run, git_content):
+    result = run("goal", "to-task", "write-m")
+    assert result.exit_code == 0, result.output
+    assert "Goal write-methods is now a task in project project-a" in result.output
+    assert "write-methods" in run("next").output.split("Goals with no tasks")[0]
+    result = run("goal", "to-task", "write-i")
+    assert result.exit_code == EXIT_INVALID
+    assert "still has tasks" in result.output

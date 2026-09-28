@@ -62,36 +62,130 @@ def first_heading(body: str) -> str | None:
     return None
 
 
+def section_span(lines: list[str], heading: str, start: int = 0) -> tuple[int, int] | None:
+    """Find the ``## <heading>`` section in ``lines`` (searching from ``start``).
+
+    Returns ``(heading_index, end)``, where ``end`` is the index of the next
+    heading of the same or higher level (or ``len(lines)``). Headings inside
+    fenced code blocks don't count; the heading name is case-insensitive.
+    """
+    level: int | None = None
+    begin = 0
+    in_code = False
+    for i in range(start, len(lines)):
+        line = lines[i]
+        if line.lstrip().startswith(("```", "~~~")):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        m = _HEADING_RE.match(line.rstrip("\n"))
+        if not m:
+            continue
+        depth = len(m.group(1))
+        if level is not None and depth <= level:
+            return begin, i
+        if level is None and m.group(2).strip().lower() == heading.lower():
+            level, begin = depth, i
+    return (begin, len(lines)) if level is not None else None
+
+
+def _section_lines(body: str, heading: str) -> list[str]:
+    lines = body.splitlines()
+    span = section_span(lines, heading)
+    return lines[span[0] + 1 : span[1]] if span else []
+
+
 def count_subtasks(body: str, heading: str = SUBTASKS_HEADING) -> tuple[int, int]:
     """Return ``(done, total)`` checkbox counts under the ``## <heading>`` section.
 
     The section ends at the next heading of the same or higher level.
     """
     done = total = 0
-    level: int | None = None
     in_code = False
-    for line in body.splitlines():
+    for line in _section_lines(body, heading):
         if line.lstrip().startswith(("```", "~~~")):
             in_code = not in_code
             continue
-        if in_code:
-            continue
-        m = _HEADING_RE.match(line)
-        if m:
-            depth = len(m.group(1))
-            if level is not None and depth <= level:
-                break
-            if level is None and m.group(2).strip().lower() == heading.lower():
-                level = depth
-            continue
-        if level is None:
-            continue
-        cb = _CHECKBOX_RE.match(line)
+        cb = None if in_code else _CHECKBOX_RE.match(line)
         if cb:
             total += 1
             if cb.group(1) in "xX":
                 done += 1
     return done, total
+
+
+_BULLET_RE = re.compile(r"^[-*+]\s+(?:\[[ xX]\]\s+)?(.*\S)\s*$")
+
+
+def section_bullets(
+    text: str, heading: str, *, skip_frontmatter: bool = True
+) -> list[tuple[int, str]]:
+    """Top-level bullet items under ``## <heading>`` as ``(line_index, text)``.
+
+    ``line_index`` indexes ``text.splitlines()`` (the whole file, frontmatter
+    included), so callers can remove the line again. Indented lines are
+    treated as continuations and skipped.
+    """
+    lines = text.splitlines()
+    span = section_span(lines, heading, frontmatter_lines(text) if skip_frontmatter else 0)
+    if span is None:
+        return []
+    items = []
+    for i in range(span[0] + 1, span[1]):
+        m = _BULLET_RE.match(lines[i])
+        if m:
+            items.append((i, m.group(1)))
+    return items
+
+
+def append_to_section(text: str, heading: str, line: str) -> str:
+    """Add ``line`` as the last item of ``## <heading>`` (after frontmatter),
+    creating the section at the end of the file if it doesn't exist."""
+    lines = text.splitlines(keepends=True)
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    span = section_span([ln.rstrip("\n") for ln in lines], heading, frontmatter_lines(text))
+    if span is None:
+        while lines and not lines[-1].strip():
+            lines.pop()
+        return "".join([*lines, f"\n## {heading}\n", f"{line}\n"])
+    at = span[1]
+    while at > span[0] + 1 and not lines[at - 1].strip():
+        at -= 1
+    return "".join([*lines[:at], f"{line}\n", *lines[at:]])
+
+
+def ensure_section(text: str, heading: str, before: tuple[str, ...] = ()) -> str:
+    """Add an empty ``## <heading>`` section if there isn't one: in front of the
+    first of the ``before`` sections that exists, else at the end of the file."""
+    lines = text.splitlines(keepends=True)
+    start = frontmatter_lines(text)
+    stripped = [ln.rstrip("\n") for ln in lines]
+    if section_span(stripped, heading, start) is not None:
+        return text
+    spans = [section_span(stripped, b, start) for b in before]
+    found = [span[0] for span in spans if span is not None]
+    if found:
+        at = min(found)
+        return "".join([*lines[:at], f"## {heading}\n\n", *lines[at:]])
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    return "".join([*lines, f"\n## {heading}\n"])
+
+
+def remove_line(text: str, index: int) -> str:
+    lines = text.splitlines(keepends=True)
+    del lines[index]
+    return "".join(lines)
+
+
+def frontmatter_lines(text: str) -> int:
+    """Number of lines taken by a leading ``---`` frontmatter block (0 if none)."""
+    m = _FRONTMATTER_RE.match(text)
+    return m.group(0).count("\n") + (0 if m.group(0).endswith("\n") else 1) if m else 0
 
 
 # --- minimal, formatting-preserving edits -----------------------------------
@@ -132,9 +226,40 @@ def set_yaml_key(text: str, key: str, value: Any) -> str:
     return "".join([*lines, new_line])
 
 
-def set_frontmatter_key(text: str, key: str, value: Any) -> str:
+def remove_yaml_key(text: str, key: str) -> str:
+    """Remove top-level ``key`` (and a block-style value) from a YAML mapping document."""
+    lines = text.splitlines(keepends=True)
+    key_re = re.compile(rf"^{re.escape(key)}\s*:")
+    for i, line in enumerate(lines):
+        if key_re.match(line):
+            j = i + 1
+            while j < len(lines) and lines[j].strip() and lines[j][0] in " \t-":
+                j += 1
+            return "".join([*lines[:i], *lines[j:]])
+    return text
+
+
+def _map_frontmatter(text: str, fn: Any) -> str:
     m = _FRONTMATTER_RE.match(text)
     if not m:
         raise ValidationError("file has no YAML frontmatter block")
-    inner = set_yaml_key(m.group(1) or "", key, value)
-    return f"---\n{inner}---\n{text[m.end() :]}"
+    return f"---\n{fn(m.group(1) or '')}---\n{text[m.end() :]}"
+
+
+def set_frontmatter_key(text: str, key: str, value: Any) -> str:
+    return _map_frontmatter(text, lambda inner: set_yaml_key(inner, key, value))
+
+
+def remove_frontmatter_key(text: str, key: str) -> str:
+    return _map_frontmatter(text, lambda inner: remove_yaml_key(inner, key))
+
+
+def set_first_heading(text: str, title: str) -> str | None:
+    """Replace the text of the first level-1 heading. Returns None if there is none."""
+    lines = text.splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        m = _HEADING_RE.match(line)
+        if m and len(m.group(1)) == 1:
+            lines[i] = f"# {title}\n"
+            return "".join(lines)
+    return None

@@ -7,7 +7,7 @@ from typing import Annotated
 import typer
 
 from tavla.cli.common import ContentDirOpt, complete_project, handles_errors, state
-from tavla.core import ops
+from tavla.core import ideas, ops
 
 
 @handles_errors
@@ -18,8 +18,9 @@ def capture(
     ],
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Append a thought, idea or todo to the inbox for later triage."""
-    line = ops.capture(state(ctx, content_dir=content_dir).content(), " ".join(text))
+    """Append a thought, idea or todo to the inbox for later triage (see `idea`)."""
+    content = state(ctx, content_dir=content_dir).content()
+    line = ideas.add(content, ideas.scope_of(content, None), " ".join(text))
     typer.echo(f"Captured: {line}")
 
 
