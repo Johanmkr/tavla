@@ -1,5 +1,7 @@
 # tavla
 
+[![docs](https://github.com/Johanmkr/tavla/actions/workflows/docs.yml/badge.svg)](https://johanmkr.github.io/tavla/)
+
 A personal research operations tool for one researcher juggling several
 projects: goals, tasks, loose ideas, progress logs and a cross-project "what
 next?" view. CLI-first, plain text, git-native.
