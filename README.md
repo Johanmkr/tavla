@@ -13,9 +13,9 @@ next?" view. CLI-first, plain text, git-native.
 **User guide:** <https://johanmkr.github.io/tavla/> — concepts, worked
 examples, a full command reference and an FAQ.
 
-> **Status:** Tier 1 complete — projects, goals, tasks (with subtasks and
-> dependencies), ideas, capture, log, `next`, `status`. Subprojects via the CLI,
-> deliverables, code-repo links and Zotero sync are planned (Tier 2).
+> **Status:** Tier 1 complete — projects and subprojects, goals, tasks (with
+> subtasks and dependencies), ideas, capture, log, `next`, `status`.
+> Deliverables, code-repo links and Zotero sync are planned (Tier 2).
 
 ## How work is organised
 
@@ -34,7 +34,8 @@ Project            e.g. "Adaptive sampling"          project.yaml
 - **Ideas** are single lines that can belong to the inbox, a project, a goal or
   a task, and be moved, dropped or promoted to a task/goal later. `#words` in an
   idea are tags.
-- Projects can have **subprojects** with the same structure.
+- Projects can have **subprojects** with the same structure (`project add -p`),
+  and a project can be moved under another one or back out (`project edit -p`).
 
 ## Install
 
@@ -99,10 +100,10 @@ id prefixes and shows each title next to its id.
 | `tavla next [-p PROJECT] [--priority P] [-n N]` | Open tasks not waiting on others, most important first (default 10; `-n 0` for all), then goals with no tasks yet |
 | `tavla status [--stale-days N] [--deadline-days N]` | Stale projects, blocked and waiting tasks, goals/tasks due within 7 days, goals ready to close, deliverable deadlines, inbox size |
 | **Projects** | |
-| `tavla project add NAME [--priority P] [--tags a,b] [--id ID]` | Create a project |
+| `tavla project add NAME [-p PARENT] [--priority P] [--tags a,b] [--id ID]` | Create a project, or with `-p` a subproject |
 | `tavla project list [--status S] [--all]` | List projects (archived hidden unless `--all`) |
 | `tavla project show ID` | Metadata, subprojects, goals, loose tasks, deliverables, ideas, recent log |
-| `tavla project edit ID [--title T] [--status S] [--priority P] [--tags …]` | Change the given fields; with no options, edit `project.yaml` in `$EDITOR` |
+| `tavla project edit ID [--title T] [--status S] [--priority P] [--tags …] [-p PARENT\|none]` | Change the given fields (`-p` moves it under another project; `none` makes it top-level); with no options, edit `project.yaml` in `$EDITOR` |
 | **Goals** | |
 | `tavla goal add TITLE -p PROJECT [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a goal |
 | `tavla goal list [-p PROJECT] [--status S] [--all]` | List goals with task progress (done hidden unless `--all`) |
@@ -185,7 +186,7 @@ year) while editing a file by hand, tavla rewrites it to ISO when you save.
         │   ├── outline.md     # points at its goal with `goal: intro`
         │   └── run-baseline-experiments.md
         ├── deliverables/      # *.yaml, read by `project show` and `status`
-        └── subprojects/       # same shape, nested (create by hand for now)
+        └── subprojects/       # same shape, nested (`project add -p`)
 ```
 
 A task file. tavla reads the frontmatter, the `# title`, the `## Subtasks`

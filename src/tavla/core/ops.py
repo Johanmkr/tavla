@@ -23,6 +23,7 @@ from tavla.core.entities import (
     IDEAS_HEADING,
     LOG_FILE,
     PROJECT_FILE,
+    SUBPROJECTS_DIR,
     TASKS_DIR,
     Goal,
     GoalStatus,
@@ -170,12 +171,14 @@ def add_project(
     id: str | None = None,
     priority: Priority = Priority.MED,
     tags: Iterable[str] = (),
+    parent: Project | None = None,
     today: dt.date | None = None,
 ) -> Project:
+    """Create a project, or a subproject of ``parent``."""
     git_sync.require_repo(content.root)
     title = clean_title(title)
     project_id = _new_id(content, title, id)
-    directory = content.root / bootstrap.PROJECTS_DIR / project_id
+    directory = _projects_dir(content, parent) / project_id
     if directory.exists():
         raise ValidationError(f"directory already exists: {directory}")
 
@@ -198,8 +201,48 @@ def add_project(
 
     content.refresh()
     registry = sync_registry(content)
-    git_sync.commit(content.root, f"project: add {project_id}", [directory, registry])
+    where = f" under {parent.id}" if parent else ""
+    git_sync.commit(content.root, f"project: add {project_id}{where}", [directory, registry])
     return content.project(project_id)
+
+
+def _projects_dir(content: Content, parent: Project | None) -> Path:
+    """Where the project directories under ``parent`` (or top-level ones) live."""
+    if parent is None:
+        return content.root / bootstrap.PROJECTS_DIR
+    return parent.path / SUBPROJECTS_DIR
+
+
+def move_project(content: Content, project: Project, parent: Project | None) -> Project | None:
+    """Make ``project`` a subproject of ``parent``, or top-level with None.
+
+    Its directory moves with everything in it, subprojects included; goals and
+    tasks follow because their project is the directory they live in. Returns
+    None if it is already there.
+    """
+    git_sync.require_repo(content.root)
+    new_parent = parent.id if parent else None
+    if new_parent == project.parent:
+        return None
+    if parent is not None and (
+        parent.id == project.id or parent.id in {d.id for d in content.descendants(project)}
+    ):
+        raise ValidationError(f"can't move {project.id} under {parent.id}: that is inside it")
+    directory = _projects_dir(content, parent) / project.path.name
+    if directory.exists():
+        raise ValidationError(f"directory already exists: {directory}")
+
+    directory.parent.mkdir(parents=True, exist_ok=True)
+    project.path.rename(directory)
+    if project.parent is not None and not any(project.path.parent.iterdir()):
+        project.path.parent.rmdir()  # the old parent's now-empty subprojects/
+    content.refresh()
+    registry = sync_registry(content)
+    where = f"under {parent.id}" if parent else "to top level"
+    git_sync.commit(
+        content.root, f"project: move {project.id} {where}", [project.path, directory, registry]
+    )
+    return content.project(project.id)
 
 
 # --- goals & tasks ------------------------------------------------------------

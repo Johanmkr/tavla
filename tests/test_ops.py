@@ -79,6 +79,94 @@ def test_empty_title_rejected(content):
         ops.add_project(content, "   ")
 
 
+# --- subprojects ----------------------------------------------------------------
+
+
+def test_add_subproject(content, git):
+    parent = content.project("project-a")
+    project = ops.add_project(content, "Sensitivity study", parent=parent)
+    assert project.parent == "project-a"
+    assert project.path == parent.path / "subprojects/sensitivity-study"
+    assert (project.path / "log.md").is_file()
+    registry = parsing.read_yaml(content.root / "registry.yaml")
+    assert "sensitivity-study" not in [e["id"] for e in registry]
+    assert _subjects(git, content.root)[0] == "project: add sensitivity-study under project-a"
+    assert _is_clean(git, content.root)
+
+
+def test_add_nested_subproject(content):
+    project = ops.add_project(content, "Deeper", parent=content.project("ablations"))
+    assert project.parent == "ablations"
+    assert [p.id for p in content.descendants(content.project("project-a"))] == [
+        "ablations",
+        "deeper",
+    ]
+
+
+def test_move_project_under_another(content, git):
+    goal_ids = {g.id for g in content.goals(content.project("project-b"))}
+    moved = ops.move_project(content, content.project("project-b"), content.project("project-a"))
+    assert moved.parent == "project-a"
+    assert moved.path == content.root / "projects/project-a/subprojects/project-b"
+    assert not (content.root / "projects/project-b").exists()
+    # Its goals follow it, and it drops out of the registry.
+    assert {g.id for g in content.goals(moved)} == goal_ids
+    assert {g.project for g in content.goals(moved)} == {"project-b"}
+    registry = parsing.read_yaml(content.root / "registry.yaml")
+    assert "project-b" not in [e["id"] for e in registry]
+    assert _subjects(git, content.root)[0] == "project: move project-b under project-a"
+    assert _is_clean(git, content.root)
+
+
+def test_move_subproject_to_top_level(content, git):
+    ablations = content.project("ablations")
+    task_ids = {t.id for t in content.tasks(ablations)}
+    moved = ops.move_project(content, ablations, None)
+    assert moved.parent is None
+    assert moved.path == content.root / "projects/ablations"
+    assert {t.id for t in content.tasks(moved)} == task_ids
+    # The now-empty subprojects/ folder is cleaned up.
+    assert not (content.root / "projects/project-a/subprojects").exists()
+    registry = parsing.read_yaml(content.root / "registry.yaml")
+    assert "ablations" in [e["id"] for e in registry]
+    assert _subjects(git, content.root)[0] == "project: move ablations to top level"
+    assert _is_clean(git, content.root)
+
+
+def test_move_project_carries_its_subprojects(content):
+    moved = ops.move_project(content, content.project("project-a"), content.project("project-b"))
+    assert moved.parent == "project-b"
+    assert content.project("ablations").parent == "project-a"
+    assert [p.id for p in content.descendants(content.project("project-b"))] == [
+        "project-a",
+        "ablations",
+    ]
+
+
+def test_move_project_to_same_place_is_noop(content, git):
+    before = _subjects(git, content.root)
+    assert (
+        ops.move_project(content, content.project("ablations"), content.project("project-a"))
+        is None
+    )
+    assert ops.move_project(content, content.project("project-b"), None) is None
+    assert _subjects(git, content.root) == before
+
+
+@pytest.mark.parametrize("target", ["project-a", "ablations"])
+def test_move_project_into_itself_rejected(content, target):
+    with pytest.raises(ValidationError, match="inside it"):
+        ops.move_project(content, content.project("project-a"), content.project(target))
+    assert (content.root / "projects/project-a").is_dir()
+
+
+def test_move_project_directory_clash_rejected(content):
+    (content.root / "projects/project-a/subprojects/project-b").mkdir()
+    with pytest.raises(ValidationError, match="already exists"):
+        ops.move_project(content, content.project("project-b"), content.project("project-a"))
+    assert (content.root / "projects/project-b/project.yaml").is_file()
+
+
 # --- add_goal / add_task ------------------------------------------------------
 
 
