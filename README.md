@@ -10,6 +10,9 @@ next?" view. CLI-first, plain text, git-native.
 - **Your data is separate.** Content lives in its own (private) git repo, never
   in this software repo.
 
+**User guide:** <https://johanmkr.github.io/tavla/> — concepts, worked
+examples, a full command reference and an FAQ.
+
 > **Status:** Tier 1 complete — projects, goals, tasks (with subtasks and
 > dependencies), ideas, capture, log, `next`, `status`. Subprojects via the CLI,
 > deliverables, code-repo links and Zotero sync are planned (Tier 2).

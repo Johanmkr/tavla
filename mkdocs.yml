@@ -1,0 +1,82 @@
+site_name: tavla
+site_description: A plain-text, git-native research operations tool for one researcher juggling several projects.
+site_url: https://johanmkr.github.io/tavla/
+repo_url: https://github.com/Johanmkr/tavla
+repo_name: Johanmkr/tavla
+edit_uri: edit/main/docs/
+copyright: MIT licensed
+
+docs_dir: docs
+exclude_docs: |
+  hooks/
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - navigation.indexes
+    - content.code.copy
+    - content.action.edit
+    - search.highlight
+    - search.suggest
+    - toc.follow
+  palette:
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle:
+        icon: material/brightness-4
+        name: Switch to system preference
+
+hooks:
+  - docs/hooks/cli_reference.py
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - Home: index.md
+  - Getting started: getting-started.md
+  - User guide:
+      - Organising work: guide/organising-work.md
+      - Ideas and the inbox: guide/ideas.md
+      - Daily workflow: guide/daily-workflow.md
+      - Editing and ids: guide/editing.md
+      - Your content repo: guide/content-repo.md
+      - Scripting: guide/scripting.md
+  - Examples:
+      - A master's thesis: examples/master-thesis.md
+      - Juggling several projects: examples/several-projects.md
+  - Reference:
+      - Command reference: reference/cli.md
+      - File formats: reference/file-formats.md
+  - FAQ: faq.md

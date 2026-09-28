@@ -17,3 +17,18 @@
   content repos can be upgraded with `tavla migrate`. `tests/fixtures/v1` keeps
   a copy of the oldest layout for the migration tests; `tests/fixtures/basic`
   and `example-content/` are always at the current layout.
+
+## Documentation
+
+The user guide is a MkDocs site: Markdown in `docs/`, config in `mkdocs.yml`.
+The command reference (`reference/cli.md`) is generated from the Typer app at
+build time by `docs/hooks/cli_reference.py`, so help texts are the single
+source for it. Preview locally with:
+
+```sh
+uv pip install -e '.[docs]'
+.venv/bin/mkdocs serve
+```
+
+Pushes to `main` that touch `docs/`, `mkdocs.yml` or `src/tavla/cli/` rebuild
+and publish the site via `.github/workflows/docs.yml`.
