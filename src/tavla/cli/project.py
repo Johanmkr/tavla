@@ -14,6 +14,7 @@ from tavla.cli.common import (
     complete_project,
     edit_until_valid,
     emit_json,
+    examples,
     fmt_date,
     handles_errors,
     is_clear,
@@ -30,7 +31,12 @@ app = typer.Typer(help="Create, list and inspect projects.", no_args_is_help=Tru
 RECENT_LOG_ENTRIES = 5
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv project add "PhD thesis" --id thesis --tags phd',
+        'tv project add "Chapter 2" -p thesis  # a subproject',
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,

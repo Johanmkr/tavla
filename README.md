@@ -140,7 +140,7 @@ List options (`--tags`, `--after`) take `a,b` to replace the list or `+a,-b` to
 add/remove items; `none` clears `--after`, `--due`, `--goal` and a task's
 `--priority` (which then inherits from its goal again).
 
-`tavla COMMAND --help` shows every option.
+`tavla COMMAND --help` (or `-h`) shows every option, with examples for the trickier commands.
 
 Global options: `--content-dir PATH`, `--json`, `-y/--yes`, `-v/--verbose`.
 `--content-dir` and `--json` work before or after the command

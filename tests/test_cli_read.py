@@ -5,6 +5,7 @@ import json
 import pytest
 from typer.testing import CliRunner
 
+from tavla.cli.common import examples
 from tavla.cli.main import app
 from tavla.core.errors import EXIT_ERROR, EXIT_INVALID, EXIT_NOT_FOUND
 
@@ -199,3 +200,28 @@ def test_old_layout_asks_for_migrate(content_copy):
 def test_content_dir_option_is_hidden_on_subcommands():
     result = runner.invoke(app, ["task", "list", "--help"])
     assert "--content-dir" not in result.output
+
+
+@pytest.mark.parametrize("args", [[], ["goal"], ["task", "add"]])
+def test_short_help_flag_at_every_level(args):
+    result = runner.invoke(app, [*args, "-h"])
+    assert result.exit_code == 0, result.output
+    assert result.output == runner.invoke(app, [*args, "--help"]).output
+
+
+def test_top_level_help_groups_commands_into_panels():
+    result = runner.invoke(app, ["--help"])
+    for panel in ("Daily", "Projects, goals, tasks and ideas", "Setup and maintenance"):
+        assert panel in result.output
+
+
+def test_help_shows_examples():
+    result = runner.invoke(app, ["idea", "move", "--help"])
+    assert "Examples:" in result.output
+    assert "tv idea move 3 -g intro" in result.output
+
+
+def test_examples_aligns_notes():
+    assert examples("tv a # one", "tv abc # two", "tv x") == (
+        "Examples:\ntv a    # one\ntv abc  # two\ntv x"
+    )

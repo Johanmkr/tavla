@@ -15,6 +15,7 @@ from tavla.cli.common import (
     complete_project,
     edit_until_valid,
     emit_json,
+    examples,
     fmt_date,
     handles_errors,
     item_changes,
@@ -31,7 +32,11 @@ app = typer.Typer(help="Goals: the outcomes a project works towards.", no_args_i
 GoalArg = Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_goal)]
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv goal add "Submit paper" -p thesis --due 15.12.2026 --priority high',
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,
@@ -125,7 +130,13 @@ def done(ctx: typer.Context, goal_id: GoalArg, content_dir: ContentDirOpt = None
         )
 
 
-@app.command("to-task")
+@app.command(
+    "to-task",
+    epilog=examples(
+        "tv goal to-task tidy-refs # loose task in the same project",
+        "tv goal to-task tidy-refs -g submit-paper",
+    ),
+)
 @handles_errors
 def to_task(
     ctx: typer.Context,

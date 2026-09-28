@@ -16,6 +16,7 @@ from tavla.cli.common import (
     complete_task,
     edit_until_valid,
     emit_json,
+    examples,
     fmt_date,
     handles_errors,
     is_clear,
@@ -64,7 +65,12 @@ def _after_change(content: Content, task: Task, spec: str) -> list[str] | None:
     return deps or None
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv task add "Write intro" -g intro --due fri',
+        'tv task add "Fix plots" -p thesis --after write-intro --priority high',
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,
@@ -125,7 +131,14 @@ def _priority(value: str) -> Priority:
         raise typer.BadParameter(f"'{value}' is not one of {allowed}, none") from None
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        "tv task edit fix-plots --status blocked",
+        "tv task edit fix-plots --due none --tags +urgent,-later",
+        "tv task edit fix-plots --after +write-intro",
+        "tv task edit fix-plots # no options: open in $EDITOR",
+    )
+)
 @handles_errors
 def edit(
     ctx: typer.Context,
@@ -228,7 +241,14 @@ def status_label(task: Task) -> str:
     return f"{task.status}*" if task.is_waiting and task.status != TaskStatus.DONE else task.status
 
 
-@app.command("list")
+@app.command(
+    "list",
+    epilog=examples(
+        "tv task list -p thesis",
+        "tv task list -g intro --all",
+        "tv task list --status blocked --json",
+    ),
+)
 @handles_errors
 def list_(
     ctx: typer.Context,

@@ -13,6 +13,7 @@ from tavla.cli.common import (
     complete_project,
     complete_task,
     emit_json,
+    examples,
     handles_errors,
     print_ideas,
     state,
@@ -58,7 +59,12 @@ def _scope(
     return None
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        'tv idea add "try a log scale #plots"  # to the inbox',
+        "tv idea add -g intro cite the 2019 review",
+    )
+)
 @handles_errors
 def add(
     ctx: typer.Context,
@@ -75,7 +81,14 @@ def add(
     typer.echo(f"Added to {scope.label}: {line}")
 
 
-@app.command("list")
+@app.command(
+    "list",
+    epilog=examples(
+        "tv idea list # the inbox",
+        "tv idea list -p thesis",
+        "tv idea list --all",
+    ),
+)
 @handles_errors
 def list_(
     ctx: typer.Context,
@@ -130,7 +143,12 @@ def list_(
         print_ideas(refs, heading=None)
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        "tv idea move 3 -g intro # inbox idea 3 to goal intro",
+        "tv idea move intro:scale --inbox",
+    )
+)
 @handles_errors
 def move(
     ctx: typer.Context,
@@ -152,7 +170,12 @@ def move(
     typer.echo(f"Moved to {target.label}: {idea.idea.text}")
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        "tv idea promote 2 -g intro # task under goal intro",
+        "tv idea promote thesis:1 -p thesis --as-goal",
+    )
+)
 @handles_errors
 def promote(
     ctx: typer.Context,

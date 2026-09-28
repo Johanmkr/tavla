@@ -50,6 +50,20 @@ def state(ctx: typer.Context, *, json_out: bool = False, content_dir: Path | Non
     return st
 
 
+HELP_SETTINGS = {"help_option_names": ["-h", "--help"]}
+
+
+def examples(*lines: str) -> str:
+    """A command ``epilog`` listing example invocations, one per line.
+
+    A trailing ``# note`` on a line is aligned with the others'.
+    """
+    split = [line.partition(" # ") for line in lines]
+    width = max((len(cmd.rstrip()) for cmd, sep, _ in split if sep), default=0)
+    rows = [f"{cmd.rstrip():<{width}}  # {note}" if sep else cmd for cmd, sep, note in split]
+    return "Examples:\n" + "\n".join(rows)
+
+
 JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable output.")]
 DATE_HELP = "YYYY-MM-DD, DD.MM.YYYY, DD/MM/YY, today, tomorrow, +3d, +2w or a weekday."
 TAGS_EDIT_HELP = "Replace tags (a,b) or adjust them (+a,-b)."
