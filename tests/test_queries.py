@@ -54,34 +54,56 @@ def test_last_activity_uses_log(content_copy):
 # --- next ----------------------------------------------------------------------
 
 
-def test_next_excludes_blocked_done_and_inactive(content):
-    assert [t.id for t in queries.next_tasks(content)] == ["write-intro", "write-methods"]
+def test_next_excludes_done_waiting_and_inactive(content):
+    # get-feedback-from-advisor waits on draft-related-work; project-b is paused.
+    ids = [t.id for t in queries.next_tasks(content)]
+    assert ids == ["draft-related-work", "wait-for-cluster-allocation", "fix-plot-colors"]
 
 
-def test_next_explicit_project_includes_paused(content):
+def test_next_includes_task_once_dependency_done(content_copy):
+    path = content_copy / "projects/project-a/tasks/draft-related-work.md"
+    path.write_text(path.read_text().replace("status: todo", "status: done"))
+    ids = [t.id for t in queries.next_tasks(Content.open(content_copy))]
+    assert ids[0] == "get-feedback-from-advisor"
+
+
+def test_goals_without_tasks(content):
+    assert [g.id for g in queries.goals_without_tasks(content)] == ["write-methods"]
     project_b = content.project("project-b")
-    assert [t.id for t in queries.next_tasks(content, project=project_b)] == ["write-review"]
+    assert [g.id for g in queries.goals_without_tasks(content, project=project_b)] == [
+        "write-review"
+    ]
+
+
+def test_next_explicit_project_includes_paused(content_copy):
+    _write_task(content_copy, "projects/project-b", "read-papers", status="todo")
+    content = Content.open(content_copy)
+    project_b = content.project("project-b")
+    assert [t.id for t in queries.next_tasks(content, project=project_b)] == ["read-papers"]
 
 
 def test_next_min_priority(content):
-    ids = [t.id for t in queries.next_tasks(content, min_priority=Priority.HIGH)]
-    assert ids == ["write-intro"]
+    ids = [t.id for t in queries.next_tasks(content, min_priority=Priority.MED)]
+    assert ids == ["draft-related-work", "wait-for-cluster-allocation"]
 
 
 def test_next_ordering(content_copy):
     a = "projects/project-a"
     _write_task(content_copy, a, "high-todo-late", priority="high", status="todo", due="2026-12-01")
-    _write_task(content_copy, a, "high-todo-soon", priority="high", status="todo", due="2026-10-01")
+    _write_task(content_copy, a, "high-todo-soon", priority="high", status="todo", due="2026-09-30")
     _write_task(content_copy, a, "high-todo-undated", priority="high", status="todo")
+    _write_task(content_copy, a, "high-doing", priority="high", status="doing")
     _write_task(content_copy, a, "low-doing", priority="low", status="doing")
     ids = [t.id for t in queries.next_tasks(Content.open(content_copy))]
     assert ids == [
-        "write-intro",  # high, doing
+        "high-doing",
         "high-todo-soon",
+        "draft-related-work",  # high and due 2026-10-01, both inherited from its goal
         "high-todo-late",
         "high-todo-undated",
-        "write-methods",  # med
+        "wait-for-cluster-allocation",  # med
         "low-doing",
+        "fix-plot-colors",
     ]
 
 
@@ -99,11 +121,30 @@ def test_next_breaks_ties_by_project_priority(content_copy):
 def test_status(content):
     report = queries.status(content, today=TODAY)
     assert report.active_projects == 2
-    assert (report.open_tasks, report.doing_tasks) == (2, 1)
+    assert (report.open_tasks, report.doing_tasks) == (4, 0)
     assert [(s.project.id, s.days_idle) for s in report.stale] == [("ablations", 55)]
-    assert [t.id for t in report.blocked] == ["run-ablations"]
-    assert [t.id for t in report.due_tasks] == ["write-intro"]
+    assert report.blocked == []
+    assert [t.id for t in report.waiting] == ["get-feedback-from-advisor"]
+    assert [t.id for t in report.due_tasks] == ["draft-related-work", "get-feedback-from-advisor"]
+    assert [g.id for g in report.due_goals] == ["write-intro"]
+    assert report.goals_ready == []
     assert report.deadlines == []
+    assert report.inbox == 2
+
+
+def test_status_blocked_task(content_copy):
+    path = content_copy / "projects/project-a/tasks/fix-plot-colors.md"
+    path.write_text(path.read_text().replace("status: todo", "status: blocked"))
+    report = queries.status(Content.open(content_copy), today=TODAY)
+    assert [t.id for t in report.blocked] == ["fix-plot-colors"]
+
+
+def test_status_goal_ready_to_close(content_copy):
+    for name in ("draft-related-work", "get-feedback-from-advisor"):
+        path = content_copy / f"projects/project-a/tasks/{name}.md"
+        path.write_text(path.read_text().replace("status: todo", "status: done"))
+    report = queries.status(Content.open(content_copy), today=TODAY)
+    assert [g.id for g in report.goals_ready] == ["write-intro"]
 
 
 def test_status_thresholds(content):
@@ -114,7 +155,8 @@ def test_status_thresholds(content):
 
 def test_status_overdue_items_included(content):
     report = queries.status(content, today=dt.date(2027, 6, 1))
-    assert {t.id for t in report.due_tasks} == {"write-intro", "write-methods"}
+    assert {t.id for t in report.due_tasks} == {"draft-related-work", "get-feedback-from-advisor"}
+    assert {g.id for g in report.due_goals} == {"write-intro", "write-methods"}
     assert [d.id for d in report.deadlines] == ["neurips-paper"]
 
 

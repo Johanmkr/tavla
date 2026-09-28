@@ -11,21 +11,57 @@ from tavla.cli.common import (
     TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
+    complete_goal,
     complete_project,
     complete_task,
-    date_change,
     edit_until_valid,
     emit_json,
     fmt_date,
     handles_errors,
+    is_clear,
+    item_changes,
+    progress,
     state,
     table,
 )
 from tavla.core import ops
 from tavla.core.dates import parse_date
 from tavla.core.entities import Priority, Task, TaskStatus, to_dict
+from tavla.core.store import Content
 
-app = typer.Typer(help="Create, list and inspect tasks.", no_args_is_help=True)
+app = typer.Typer(
+    help="Tasks: units of work, optionally under a goal, with subtasks.", no_args_is_help=True
+)
+
+TaskArg = Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)]
+AFTER_HELP = "Tasks this one depends on (comma-separated ids or prefixes)."
+
+
+def _dep_ids(content: Content, spec: str) -> list[str]:
+    """Resolve comma-separated task ids/prefixes to full ids."""
+    return [content.task(q).id for q in ops.parse_tags(spec)]
+
+
+def _after_change(content: Content, task: Task, spec: str) -> list[str] | None:
+    """``--after`` on an edit: replace (a,b), adjust (+a,-b) or clear (none)."""
+    if is_clear(spec):
+        return None
+    items = ops.parse_tags(spec)
+    if items and all(i[0] in "+-" for i in items):
+        parts = []
+        for item in items:
+            sign, query = item[0], item[1:].strip()
+            if sign == "-":
+                # Match against the current deps, so a dangling id can be removed.
+                current = [d for d in task.depends_on if d.startswith(query)]
+                parts.append(f"-{current[0] if len(current) == 1 else query}")
+            else:
+                parts.append(f"+{content.task(query).id}")
+        resolved = ",".join(parts)
+    else:
+        resolved = ",".join(_dep_ids(content, spec))
+    deps = ops.apply_list_spec(task.depends_on, resolved, "--after")
+    return deps or None
 
 
 @app.command()
@@ -33,49 +69,84 @@ app = typer.Typer(help="Create, list and inspect tasks.", no_args_is_help=True)
 def add(
     ctx: typer.Context,
     title: Annotated[str, typer.Argument(help="Task title.")],
-    project_id: Annotated[
-        str,
-        typer.Option(
-            "--project", "-p", help="Project to add the task to.", autocompletion=complete_project
-        ),
-    ],
-    priority: Annotated[Priority, typer.Option("--priority", help="Task priority.")] = (
-        Priority.MED
-    ),
-    due: Annotated[
+    goal_id: Annotated[
         str | None,
-        typer.Option("--due", help=DATE_HELP),
+        typer.Option(
+            "--goal", "-g", help="Goal the task belongs to.", autocompletion=complete_goal
+        ),
     ] = None,
+    project_id: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project for a task without a goal.",
+            autocompletion=complete_project,
+        ),
+    ] = None,
+    priority: Annotated[
+        Priority | None,
+        typer.Option("--priority", help="Task priority (default: the goal's, or med)."),
+    ] = None,
+    due: Annotated[str | None, typer.Option("--due", help=DATE_HELP)] = None,
+    after: Annotated[str | None, typer.Option("--after", help=AFTER_HELP)] = None,
     tags: Annotated[str | None, typer.Option("--tags", help="Comma-separated tags.")] = None,
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the title).")
     ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Create a new task in a project and commit it."""
+    """Create a new task under a goal (-g), or directly in a project (-p), and commit it."""
     content = state(ctx, content_dir=content_dir).content()
-    project = content.project(project_id)
+    if goal_id is None and project_id is None:
+        raise typer.BadParameter("give a goal (-g) or a project (-p)")
+    goal = content.goal(goal_id) if goal_id else None
+    project = content.project(project_id) if project_id else None
     task = ops.add_task(
         content,
         title,
         project,
+        goal=goal,
         id=id_,
         priority=priority,
         due=parse_date(due) if due else None,
         tags=ops.parse_tags(tags),
+        depends_on=_dep_ids(content, after) if after else (),
     )
-    typer.echo(f"Added task {task.id} to {project.id}")
+    where = f"goal {task.goal}" if task.goal else f"project {task.project}"
+    typer.echo(f"Added task {task.id} to {where}")
+
+
+def _priority(value: str) -> Priority:
+    try:
+        return Priority(value.strip().lower())
+    except ValueError:
+        allowed = ", ".join(p.value for p in Priority)
+        raise typer.BadParameter(f"'{value}' is not one of {allowed}, none") from None
 
 
 @app.command()
 @handles_errors
 def edit(
     ctx: typer.Context,
-    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    task_id: TaskArg,
     title: Annotated[str | None, typer.Option("--title", help="New title.")] = None,
     status: Annotated[TaskStatus | None, typer.Option("--status", help="New status.")] = None,
-    priority: Annotated[Priority | None, typer.Option("--priority", help="New priority.")] = None,
+    priority: Annotated[
+        str | None,
+        typer.Option("--priority", help="high, med or low; 'none' inherits the goal's."),
+    ] = None,
     due: Annotated[str | None, typer.Option("--due", help=f"{DATE_HELP} 'none' clears it.")] = None,
+    goal_id: Annotated[
+        str | None,
+        typer.Option(
+            "--goal", "-g", help="Move to this goal; 'none' detaches.", autocompletion=complete_goal
+        ),
+    ] = None,
+    after: Annotated[
+        str | None,
+        typer.Option("--after", help="Dependencies: a,b replaces, +a,-b adjusts, 'none' clears."),
+    ] = None,
     tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
@@ -85,51 +156,50 @@ def edit(
     """
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
-    changes: dict = {}
-    if status is not None:
-        changes["status"] = status.value
+    changes = item_changes(task, status=status, due=due, tags=tags)
     if priority is not None:
-        changes["priority"] = priority.value
-    if due is not None:
-        changes["due"] = date_change(due)
-    if tags is not None:
-        changes["tags"] = ops.apply_tags(task.tags, tags)
+        changes["priority"] = None if is_clear(priority) else _priority(priority).value
+    if goal_id is not None:
+        changes["goal"] = None if is_clear(goal_id) else content.goal(goal_id).id
+    if after is not None:
+        changes["depends_on"] = _after_change(content, task, after)
     if changes or title is not None:
-        edited = ops.set_task_fields(content, task, changes, title=title)
-        typer.echo("No changes." if edited is None else f"Saved task {edited.id}")
-        return
-    session = ops.EditSession(task.path)
-    edited = edit_until_valid(session, lambda: ops.finish_task_edit(content, task, session))
+        edited = ops.set_fields(content, task, changes, title=title)
+    else:
+        session = ops.EditSession(task.path)
+        edited = edit_until_valid(session, lambda: ops.finish_edit(content, task, session))
     typer.echo("No changes." if edited is None else f"Saved task {edited.id}")
 
 
 @app.command()
 @handles_errors
-def start(
-    ctx: typer.Context,
-    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
-    content_dir: ContentDirOpt = None,
-) -> None:
+def start(ctx: typer.Context, task_id: TaskArg, content_dir: ContentDirOpt = None) -> None:
     """Mark a task as doing (from todo, blocked, or done)."""
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
-    if ops.start_task(content, task) is None:
+    if ops.start(content, task) is None:
         typer.echo(f"{task.id} is already in progress.")
         return
     typer.echo(f"Started: {task.id} ({task.title}) — was {task.status}")
+    if task.is_waiting:
+        typer.secho(
+            f"note: still waiting on {', '.join(task.waiting_on)}",
+            fg=typer.colors.YELLOW,
+            err=True,
+        )
 
 
 @app.command()
 @handles_errors
-def done(
-    ctx: typer.Context,
-    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
-    content_dir: ContentDirOpt = None,
-) -> None:
+def done(ctx: typer.Context, task_id: TaskArg, content_dir: ContentDirOpt = None) -> None:
     """Mark a task done (sets status and updated; the body is left untouched)."""
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
-    if ops.complete_task(content, task) is None:
+    # Tasks waiting on nothing but this one: they become available now.
+    unblocked = [
+        t.id for t in content.tasks() if t.waiting_on == [task.id] and t.status != TaskStatus.DONE
+    ]
+    if ops.complete(content, task) is None:
         typer.echo(f"{task.id} is already done.")
         return
     typer.echo(f"Done: {task.id} ({task.title})")
@@ -140,6 +210,8 @@ def done(
             fg=typer.colors.YELLOW,
             err=True,
         )
+    if unblocked:
+        typer.echo(f"Now unblocked: {', '.join(unblocked)}")
 
 
 def _sort_key(task: Task) -> tuple:
@@ -148,7 +220,12 @@ def _sort_key(task: Task) -> tuple:
 
 
 def subtask_progress(task: Task) -> str:
-    return f"{task.subtasks_done}/{task.subtasks_total}" if task.subtasks_total else "-"
+    return progress(task.subtasks_done, task.subtasks_total)
+
+
+def status_label(task: Task) -> str:
+    """Status, marked when the task is waiting on unfinished dependencies."""
+    return f"{task.status}*" if task.is_waiting and task.status != TaskStatus.DONE else task.status
 
 
 @app.command("list")
@@ -164,6 +241,10 @@ def list_(
             autocompletion=complete_project,
         ),
     ] = None,
+    goal_id: Annotated[
+        str | None,
+        typer.Option("--goal", "-g", help="Only this goal's tasks.", autocompletion=complete_goal),
+    ] = None,
     status: Annotated[
         TaskStatus | None, typer.Option("--status", help="Only tasks with this status.")
     ] = None,
@@ -171,11 +252,17 @@ def list_(
     json_out: JsonOpt = False,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """List tasks, highest priority first. Done tasks are hidden unless asked for."""
+    """List tasks, highest priority first. Done tasks are hidden unless asked for.
+
+    A * after the status means the task is waiting on unfinished dependencies.
+    """
     st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     project = content.project(project_id) if project_id else None
     tasks = content.tasks(project)
+    if goal_id is not None:
+        goal = content.goal(goal_id)
+        tasks = [t for t in tasks if t.goal == goal.id]
     if status is not None:
         tasks = [t for t in tasks if t.status == status]
     elif not all_:
@@ -190,10 +277,19 @@ def list_(
         return
     table(
         [
-            [t.id, t.status, t.priority, fmt_date(t.due), subtask_progress(t), t.project, t.title]
+            [
+                t.id,
+                status_label(t),
+                t.priority,
+                fmt_date(t.due),
+                subtask_progress(t),
+                t.goal or "-",
+                t.project,
+                t.title,
+            ]
             for t in tasks
         ],
-        ["ID", "STATUS", "PRIORITY", "DUE", "SUBTASKS", "PROJECT", "TITLE"],
+        ["ID", "STATUS", "PRIORITY", "DUE", "SUBTASKS", "GOAL", "PROJECT", "TITLE"],
     )
 
 
@@ -201,7 +297,7 @@ def list_(
 @handles_errors
 def show(
     ctx: typer.Context,
-    task_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_task)],
+    task_id: TaskArg,
     json_out: JsonOpt = False,
     content_dir: ContentDirOpt = None,
 ) -> None:
@@ -214,14 +310,21 @@ def show(
         emit_json(task, content.root)
         return
 
+    def inherited(name: str, value: str) -> str:
+        return f"{value} (from goal)" if name in task.inherited else value
+
     typer.secho(task.title, bold=True)
+    statuses = {t.id: t.status for t in content.tasks()}
+    deps = ", ".join(f"{d} [{statuses.get(d, 'missing')}]" for d in task.depends_on)
     fields = [
         ("id", task.id),
         ("project", task.project),
+        ("goal", task.goal),
         ("status", task.status),
-        ("priority", task.priority),
+        ("priority", inherited("priority", task.priority)),
+        ("after", deps),
         ("tags", ", ".join(task.tags)),
-        ("due", fmt_date(task.due) if task.due else None),
+        ("due", inherited("due", fmt_date(task.due)) if task.due else None),
         ("subtasks", subtask_progress(task) if task.subtasks_total else None),
         ("created", fmt_date(task.created) if task.created else None),
         ("updated", fmt_date(task.updated) if task.updated else None),

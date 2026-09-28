@@ -8,9 +8,9 @@ from typing import Annotated
 import typer
 
 from tavla import __version__, config
-from tavla.cli import capture, overview, project, task
+from tavla.cli import capture, goal, idea, overview, project, task
 from tavla.cli.common import State, handles_errors, state
-from tavla.core import bootstrap
+from tavla.core import bootstrap, migrate
 
 app = typer.Typer(
     name="tavla",
@@ -22,7 +22,9 @@ app.command("log")(capture.log)
 app.command("next")(overview.next_)
 app.command("status")(overview.status)
 app.add_typer(project.app, name="project")
+app.add_typer(goal.app, name="goal")
 app.add_typer(task.app, name="task")
+app.add_typer(idea.app, name="idea")
 
 
 def _version_callback(value: bool) -> None:
@@ -70,3 +72,42 @@ def init(
         typer.echo(f"Wrote config to {result.config_written}")
     elif st.verbose:
         typer.echo(f"Existing config left untouched: {config.config_path()}")
+
+
+@app.command("migrate")
+@handles_errors
+def migrate_(
+    ctx: typer.Context,
+    dry_run: Annotated[
+        bool, typer.Option("--dry-run", "-n", help="Show what would change; write nothing.")
+    ] = False,
+    content_dir: Annotated[Path | None, typer.Option("--content-dir", hidden=True)] = None,
+) -> None:
+    """Upgrade the content repo to the layout this tavla uses (one git commit).
+
+    v1 -> v2: each task becomes a goal (tasks/ -> goals/), and each of its
+    subtask checkboxes becomes a task under that goal.
+    """
+    st = state(ctx, content_dir=content_dir)
+    plan = migrate.plan(st.content_dir)
+    if not plan.needed:
+        typer.echo(f"Already at layout v{plan.from_version}; nothing to do.")
+        return
+    typer.secho(
+        f"Migrating {plan.root} from layout v{plan.from_version} to v{plan.to_version}", bold=True
+    )
+    for move in plan.moves:
+        typer.echo(
+            f"  goal  {move.goal_id}: {move.old.relative_to(plan.root)} -> "
+            f"{move.new.relative_to(plan.root)}"
+        )
+        for t in move.tasks:
+            state_ = "done" if t.done else "todo"
+            typer.echo(f"    task  {t.id} [{state_}]  {t.title}")
+    if not plan.moves:
+        typer.echo("  (no task files to convert)")
+    if dry_run:
+        typer.echo("Dry run: nothing written.")
+        return
+    migrate.apply(plan)
+    typer.echo("Done. Committed as one change; `git revert HEAD` in the content repo undoes it.")

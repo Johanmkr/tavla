@@ -62,7 +62,7 @@ def test_add_project_explicit_id_collision(content):
 
 
 def test_ids_are_global_across_entity_types(content):
-    # 'write-intro' is a task id; a project can't take it.
+    # 'write-intro' is a goal id; a project can't take it.
     with pytest.raises(ValidationError, match="already used"):
         ops.add_project(content, "x", id="write-intro")
 
@@ -79,16 +79,35 @@ def test_empty_title_rejected(content):
         ops.add_project(content, "   ")
 
 
-# --- add_task ----------------------------------------------------------------
+# --- add_goal / add_task ------------------------------------------------------
 
 
-def test_add_task(content, git):
+def test_add_goal(content, git):
+    project = content.project("project-b")
+    goal = ops.add_goal(
+        content,
+        "Submit review",
+        project,
+        priority=Priority.HIGH,
+        due=dt.date(2026, 12, 1),
+        today=TODAY,
+    )
+    assert goal.path == project.path / "goals/submit-review.md"
+    assert goal.path.read_text() == (
+        "---\nid: submit-review\nproject: project-b\nstatus: todo\npriority: high\n"
+        "tags: []\ncreated: 2026-09-25\nupdated: 2026-09-25\ndue: 2026-12-01\n---\n\n"
+        "# Submit review\n\n## Context\n\n## Ideas\n\n## Updates\n"
+    )
+    assert _subjects(git, content.root)[0] == "goal: add submit-review"
+    assert _is_clean(git, content.root)
+
+
+def test_add_loose_task(content, git):
     project = content.project("project-b")
     task = ops.add_task(
         content,
         "Read Gelman 1992",
         project,
-        priority=Priority.HIGH,
         due=dt.date(2026, 10, 3),
         tags=["reading"],
         today=TODAY,
@@ -96,17 +115,48 @@ def test_add_task(content, git):
     assert task.id == "read-gelman-1992"
     assert task.path == project.path / "tasks/read-gelman-1992.md"
     assert task.path.read_text() == (
-        "---\nid: read-gelman-1992\nproject: project-b\nstatus: todo\npriority: high\n"
+        "---\nid: read-gelman-1992\nproject: project-b\nstatus: todo\npriority: med\n"
         "tags: [reading]\ncreated: 2026-09-25\nupdated: 2026-09-25\ndue: 2026-10-03\n---\n\n"
-        "# Read Gelman 1992\n\n## Context\n\n## Subtasks\n\n## Updates\n"
+        "# Read Gelman 1992\n\n## Instructions\n\n## Subtasks\n\n## Ideas\n\n## Updates\n"
     )
-    assert (task.status, task.title, task.subtasks_total) == (
+    assert (task.status, task.title, task.goal, task.subtasks_total) == (
         TaskStatus.TODO,
         "Read Gelman 1992",
+        None,
         0,
     )
     assert _subjects(git, content.root)[0] == "task: add read-gelman-1992"
     assert _is_clean(git, content.root)
+
+
+def test_add_task_under_goal_inherits(content):
+    goal = content.goal("write-intro")
+    task = ops.add_task(
+        content, "Polish prose", goal=goal, depends_on=["draft-related-work"], today=TODAY
+    )
+    assert (task.project, task.goal) == ("project-a", "write-intro")
+    text = task.path.read_text()
+    assert "goal: write-intro\n" in text and "priority" not in text
+    assert "depends_on: [draft-related-work]\n" in text
+    assert (task.priority, task.inherited) == (Priority.HIGH, ["priority", "due"])
+    assert task.waiting_on == ["draft-related-work"]
+
+
+def test_add_task_goal_in_other_project_rejected(content):
+    with pytest.raises(ValidationError, match="belongs to project"):
+        ops.add_task(content, "x", content.project("project-b"), goal=content.goal("write-intro"))
+
+
+def test_add_task_unknown_dependency_rejected(content, git):
+    with pytest.raises(ValidationError, match="unknown task 'nope'"):
+        ops.add_task(content, "x", content.project("project-a"), depends_on=["nope"])
+    assert not (content.root / "projects/project-a/tasks/x.md").exists()
+    assert _is_clean(git, content.root)
+
+
+def test_add_task_needs_goal_or_project(content):
+    with pytest.raises(ValidationError, match="goal or a project"):
+        ops.add_task(content, "x")
 
 
 def test_add_task_into_subproject(content):
@@ -131,74 +181,105 @@ def _edit(path, old, new):
     path.write_text(path.read_text().replace(old, new))
 
 
-def test_task_edit_unchanged_is_noop(content, git):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    assert ops.finish_task_edit(content, task, session, today=TODAY) is None
+def test_edit_unchanged_is_noop(content, git):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    assert ops.finish_edit(content, goal, session, today=TODAY) is None
     assert _subjects(git, content.root) == ["initial"]
 
 
 def test_task_edit_commits_and_bumps_updated(content, git):
-    task = content.task("write-intro")
+    task = content.task("draft-related-work")
     session = ops.EditSession(task.path)
-    _edit(task.path, "- [ ] Draft related work", "- [x] Draft related work")
-    edited = ops.finish_task_edit(content, task, session, today=TODAY)
+    _edit(task.path, "- [ ] Write two paragraphs", "- [x] Write two paragraphs")
+    edited = ops.finish_edit(content, task, session, today=TODAY)
     assert edited.updated == TODAY
     assert edited.subtasks_done == 2
-    assert _subjects(git, content.root)[0] == "task: edit write-intro"
+    assert _subjects(git, content.root)[0] == "task: edit draft-related-work"
     assert _is_clean(git, content.root)
 
 
-def test_task_edit_keeps_user_set_updated(content):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    _edit(task.path, "updated: 2026-09-20", "updated: 2026-09-22")
-    assert ops.finish_task_edit(content, task, session, today=TODAY).updated == dt.date(2026, 9, 22)
+def test_goal_edit_keeps_user_set_updated(content):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "updated: 2026-09-20", "updated: 2026-09-22")
+    assert ops.finish_edit(content, goal, session, today=TODAY).updated == dt.date(2026, 9, 22)
 
 
-def test_task_edit_normalizes_day_first_dates(content, git):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    _edit(task.path, "due: 2026-10-01", "due: 03.10.26")
-    assert ops.finish_task_edit(content, task, session, today=TODAY).due == dt.date(2026, 10, 3)
-    assert "due: 2026-10-03\n" in task.path.read_text()
+def test_edit_normalizes_day_first_dates(content, git):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "due: 2026-10-01", "due: 03.10.26")
+    assert ops.finish_edit(content, goal, session, today=TODAY).due == dt.date(2026, 10, 3)
+    assert "due: 2026-10-03\n" in goal.path.read_text()
     assert _is_clean(git, content.root)
 
 
-def test_task_edit_rejects_yearless_date_in_file(content):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    _edit(task.path, "due: 2026-10-01", "due: 03.10")
+def test_edit_rejects_yearless_date_in_file(content):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "due: 2026-10-01", "due: 03.10")
     with pytest.raises(ValidationError, match="invalid due date"):
-        ops.finish_task_edit(content, task, session, today=TODAY)
+        ops.finish_edit(content, goal, session, today=TODAY)
 
 
-def test_task_edit_invalid_is_not_committed(content, git):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    _edit(task.path, "status: doing", "status: wip")
+def test_edit_invalid_is_not_committed(content, git):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "status: doing", "status: wip")
     with pytest.raises(ValidationError, match="wip"):
-        ops.finish_task_edit(content, task, session, today=TODAY)
+        ops.finish_edit(content, goal, session, today=TODAY)
     assert _subjects(git, content.root) == ["initial"]
     session.restore()
     assert _is_clean(git, content.root)
 
 
-def test_task_edit_id_collision(content):
-    task = content.task("write-intro")
-    session = ops.EditSession(task.path)
-    _edit(task.path, "id: write-intro", "id: write-methods")
+def test_edit_id_collision(content):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "id: write-intro", "id: fix-plot-colors")  # a task id: ids are global
     with pytest.raises(ValidationError, match="already used"):
-        ops.finish_task_edit(content, task, session, today=TODAY)
+        ops.finish_edit(content, goal, session, today=TODAY)
 
 
-def test_task_edit_rename(content, git):
-    task = content.task("write-intro")
+def test_goal_rename_updates_its_tasks(content, git):
+    goal = content.goal("write-intro")
+    session = ops.EditSession(goal.path)
+    _edit(goal.path, "id: write-intro", "id: intro")
+    assert ops.finish_edit(content, goal, session, today=TODAY).id == "intro"
+    assert _subjects(git, content.root)[0] == "goal: rename write-intro -> intro"
+    assert content.goal("intro").path.name == "write-intro.md"  # filename is irrelevant
+    assert {t.id for t in content.goal_tasks(content.goal("intro"))} == {
+        "outline-structure",
+        "draft-related-work",
+        "get-feedback-from-advisor",
+    }
+    assert _is_clean(git, content.root)
+
+
+def test_task_rename_updates_dependents(content, git):
+    task = content.task("draft-related-work")
     session = ops.EditSession(task.path)
-    _edit(task.path, "id: write-intro", "id: intro")
-    assert ops.finish_task_edit(content, task, session, today=TODAY).id == "intro"
-    assert _subjects(git, content.root)[0] == "task: rename write-intro -> intro"
-    assert content.task("intro").path.name == "write-intro.md"  # filename is irrelevant
+    _edit(task.path, "id: draft-related-work", "id: draft")
+    ops.finish_edit(content, task, session, today=TODAY)
+    assert content.task("get-feedback").depends_on == ["draft"]
+    assert _is_clean(git, content.root)
+
+
+def test_task_edit_rejects_dependency_cycle(content):
+    task = content.task("draft-related-work")
+    session = ops.EditSession(task.path)
+    _edit(task.path, "status: todo", "status: todo\ndepends_on: [get-feedback-from-advisor]")
+    with pytest.raises(ValidationError, match="cycle: draft-related-work -> get-feedback"):
+        ops.finish_edit(content, task, session, today=TODAY)
+
+
+def test_task_edit_rejects_unknown_goal(content):
+    task = content.task("fix-plot-colors")
+    session = ops.EditSession(task.path)
+    _edit(task.path, "status: todo", "status: todo\ngoal: nope")
+    with pytest.raises(ValidationError, match="unknown goal 'nope'"):
+        ops.finish_edit(content, task, session, today=TODAY)
 
 
 def test_project_edit_syncs_registry(content, git):
@@ -220,29 +301,45 @@ def test_project_edit_syncs_registry(content, git):
     [("x, y", ["x", "y"]), ("+c,-a", ["b", "c"]), ("+a", ["a", "b"]), ("-zzz", ["a", "b"])],
 )
 def test_apply_tags(spec, expected):
-    assert ops.apply_tags(["a", "b"], spec) == expected
+    assert ops.apply_list_spec(["a", "b"], spec) == expected
 
 
 def test_apply_tags_mixed_is_error():
     with pytest.raises(ValidationError):
-        ops.apply_tags([], "a,+b")
+        ops.apply_list_spec([], "a,+b")
 
 
-def test_set_task_fields_keeps_comments_and_order(content, git):
-    task = content.task("write-intro")
-    task.path.write_text(task.path.read_text().replace("priority: high", "priority: high  # !"))
+def test_set_fields_keeps_comments_and_order(content, git):
+    goal = content.goal("write-intro")
+    goal.path.write_text(goal.path.read_text().replace("priority: high", "priority: high  # !"))
     git(content.root, "commit", "-qam", "comment")
     content.refresh()
-    ops.set_task_fields(content, content.task("write-intro"), {"status": "blocked"}, today=TODAY)
-    text = task.path.read_text()
+    ops.set_fields(content, content.goal("write-intro"), {"status": "blocked"}, today=TODAY)
+    text = goal.path.read_text()
     assert "status: blocked\npriority: high  # !\n" in text
     assert "updated: 2026-09-25" in text
+    assert _subjects(git, content.root)[0] == "goal: edit write-intro (status)"
     assert _is_clean(git, content.root)
 
 
-def test_set_task_fields_invalid_restores(content, git):
-    task = content.task("write-intro")
-    before = task.path.read_text()
+def test_set_fields_invalid_restores(content, git):
+    goal = content.goal("write-intro")
+    before = goal.path.read_text()
     with pytest.raises(ValidationError):
-        ops.set_task_fields(content, task, {"status": "wip"}, today=TODAY)
+        ops.set_fields(content, goal, {"status": "wip"}, today=TODAY)
+    assert goal.path.read_text() == before
+
+
+def test_set_fields_cycle_restores(content, git):
+    task = content.task("draft-related-work")
+    before = task.path.read_text()
+    with pytest.raises(ValidationError, match="cycle"):
+        ops.set_fields(content, task, {"depends_on": ["get-feedback-from-advisor"]}, today=TODAY)
     assert task.path.read_text() == before
+    assert _is_clean(git, content.root)
+
+
+def test_set_fields_moves_task_to_goal(content):
+    task = ops.set_fields(content, content.task("fix-plot"), {"goal": "write-intro"}, today=TODAY)
+    assert task.goal == "write-intro"
+    assert content.goal("write-intro").tasks_total == 4

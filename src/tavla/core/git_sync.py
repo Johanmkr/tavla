@@ -45,6 +45,11 @@ def require_repo(path: Path) -> None:
         raise GitError(f"{path} is not a git repository; tavla needs one to record changes")
 
 
+def is_clean(repo: Path) -> bool:
+    """True if the work tree has no uncommitted changes (untracked files count)."""
+    return _git(repo, "status", "--porcelain").stdout.strip() == ""
+
+
 def commit(repo: Path, message: str, paths: Iterable[Path | str] | None = None) -> bool:
     """Stage and commit ``paths`` (or everything) with ``message``.
 

@@ -77,3 +77,61 @@ def test_yaml_round_trip(tmp_path):
     path = tmp_path / "x.yaml"
     parsing.write_yaml(path, [{"id": "a", "path": "projects/a"}])
     assert parsing.read_yaml(path) == [{"id": "a", "path": "projects/a"}]
+
+
+# --- sections ----------------------------------------------------------------------
+
+DOC = """---
+id: x
+# Ideas: a YAML comment, not a heading
+---
+
+# Title
+
+## Ideas
+- one
+  continuation
+- two
+
+## Updates
+- 2026-01-01: not an idea
+"""
+
+
+def test_section_bullets_skip_frontmatter_and_continuations():
+    assert parsing.section_bullets(DOC, "Ideas") == [(8, "one"), (10, "two")]
+    assert parsing.section_bullets(DOC, "Missing") == []
+
+
+def test_append_to_section_before_next_heading():
+    out = parsing.append_to_section(DOC, "Ideas", "- three")
+    assert "- two\n- three\n\n## Updates" in out
+
+
+def test_append_to_section_creates_it():
+    out = parsing.append_to_section("---\nid: x\n---\n# T\n\n", "Ideas", "- a")
+    assert out == "---\nid: x\n---\n# T\n\n## Ideas\n- a\n"
+
+
+def test_remove_line():
+    assert parsing.remove_line("a\nb\nc\n", 1) == "a\nc\n"
+
+
+def test_frontmatter_lines():
+    assert parsing.frontmatter_lines(DOC) == 4
+    assert parsing.frontmatter_lines("# no frontmatter\n") == 0
+
+
+def test_remove_frontmatter_key_with_block_value():
+    text = "---\nid: x\ntags:\n  - a\n  - b\ndue: 2026-01-01\n---\nbody\n"
+    assert (
+        parsing.remove_frontmatter_key(text, "tags") == "---\nid: x\ndue: 2026-01-01\n---\nbody\n"
+    )
+    assert parsing.remove_frontmatter_key(text, "nope") == text
+
+
+def test_set_first_heading():
+    assert (
+        parsing.set_first_heading("## Sub\n# Old\n# Other\n", "New") == "## Sub\n# New\n# Other\n"
+    )
+    assert parsing.set_first_heading("no heading\n", "New") is None

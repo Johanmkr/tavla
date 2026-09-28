@@ -1,0 +1,10 @@
+# Master index of top-level projects — managed by tavla.
+- id: project-a
+  path: projects/project-a
+  status: active
+- id: project-b
+  path: projects/project-b
+  status: paused
+- id: project-c
+  path: projects/project-c
+  status: archived

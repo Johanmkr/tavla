@@ -16,6 +16,7 @@ from typing import Annotated, Any, ParamSpec, TypeVar
 import typer
 
 from tavla import config
+from tavla.core import ops
 from tavla.core.dates import parse_date
 from tavla.core.entities import to_dict
 from tavla.core.errors import TavlaError, ValidationError
@@ -57,7 +58,46 @@ CLEAR_WORDS = ("none", "-")
 
 def date_change(value: str) -> Any:
     """``--due`` on an edit: a date, or None to clear the field."""
-    return None if value.strip().lower() in CLEAR_WORDS else parse_date(value)
+    return None if is_clear(value) else parse_date(value)
+
+
+def is_clear(value: str) -> bool:
+    return value.strip().lower() in CLEAR_WORDS
+
+
+def item_changes(
+    item: Any,
+    *,
+    status: Any = None,
+    priority: Any = None,
+    due: str | None = None,
+    tags: str | None = None,
+) -> dict[str, Any]:
+    """Frontmatter changes shared by ``goal edit`` and ``task edit``."""
+    changes: dict[str, Any] = {}
+    if status is not None:
+        changes["status"] = status.value
+    if priority is not None:
+        changes["priority"] = priority.value
+    if due is not None:
+        changes["due"] = date_change(due)
+    if tags is not None:
+        changes["tags"] = ops.apply_list_spec(item.tags, tags)
+    return changes
+
+
+def print_ideas(refs: Sequence[Any], heading: str | None = "Ideas") -> None:
+    """Print numbered ideas (``IdeaRef``s from one scope) under a bold heading."""
+    if not refs:
+        return
+    if heading:
+        typer.secho(f"\n{heading}", bold=True)
+    for r in refs:
+        typer.echo(f"  {r.number:>2}. {r.idea.text}")
+
+
+def progress(done: int, total: int) -> str:
+    return f"{done}/{total}" if total else "-"
 
 
 # Hidden: documented once as a global option, but accepted after any command too.
@@ -120,14 +160,21 @@ def _content_for_completion(ctx: typer.Context) -> Content:
     return Content.open(config.resolve_content_dir(flag))
 
 
-def complete_project(ctx: typer.Context, incomplete: str) -> list[str]:
+def complete_project(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     try:
         return complete_ids(incomplete, _content_for_completion(ctx).projects())
     except (TavlaError, OSError):
         return []
 
 
-def complete_task(ctx: typer.Context, incomplete: str) -> list[str]:
+def complete_goal(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
+    try:
+        return complete_ids(incomplete, _content_for_completion(ctx).goals())
+    except (TavlaError, OSError):
+        return []
+
+
+def complete_task(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     try:
         return complete_ids(incomplete, _content_for_completion(ctx).tasks())
     except (TavlaError, OSError):

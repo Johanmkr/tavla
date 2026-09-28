@@ -9,5 +9,4 @@ updated: 2026-08-01
 
 # Run ablation grid
 
-## Subtasks
-- [ ] Wait for cluster allocation
+## Ideas
