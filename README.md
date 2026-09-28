@@ -8,7 +8,7 @@ next?" view. CLI-first, plain text, git-native.
 
 - **Plain text.** Everything is Markdown or YAML you can read, grep and edit by hand.
 - **Git is the history.** Every change tavla makes is auto-committed to your
-  content repo, so `git log` is the audit trail and `git revert` is undo.
+  content repo, so `git log` is the audit trail and `tavla undo` reverts the last change.
 - **Your data is separate.** Content lives in its own (private) git repo, never
   in this software repo.
 
@@ -105,6 +105,7 @@ id prefixes and shows each title next to its id.
 | `tavla update [--check]` | Update tavla itself to the latest `main` (fast-forward only) |
 | `tavla capture TEXT…` | Add an idea to the inbox (quotes optional) |
 | `tavla log PROJECT TEXT…` | Append a timestamped line to the project's `log.md` |
+| `tavla undo [-n]` | Undo the last change as a new commit (`-n`: only show it); run again to go further back |
 | `tavla next [-p PROJECT] [--priority P] [-n N]` | Open tasks not waiting on others, most important first (default 10; `-n 0` for all), then goals with no tasks yet |
 | `tavla status [--stale-days N] [--deadline-days N]` | Stale projects, blocked and waiting tasks, goals/tasks due within 7 days, goals ready to close, deliverable deadlines, inbox size |
 | **Projects** | |
@@ -118,6 +119,8 @@ id prefixes and shows each title next to its id.
 | `tavla goal show ID` | Metadata, its tasks, and the goal file |
 | `tavla goal edit ID [--title T] [--status S] [--priority P] [--due DATE\|none] [--tags …]` | Change the given fields; with no options, edit the goal file in `$EDITOR` |
 | `tavla goal start ID` / `goal done ID` | Mark a goal `doing` / `done` |
+| `tavla goal note ID TEXT…` | Add a timestamped line to the goal's `## Updates` |
+| `tavla goal drop ID [-y]` | Delete a goal (asks first). Refused while tasks still belong to it |
 | `tavla goal to-task ID [-g OTHER_GOAL]` | Turn a goal into a task (loose, or under another goal); keeps its fields and notes. Refused while tasks still belong to it |
 | **Tasks** | |
 | `tavla task add TITLE (-g GOAL \| -p PROJECT) [--after IDS] [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a task under a goal, or directly in a project |
@@ -125,12 +128,22 @@ id prefixes and shows each title next to its id.
 | `tavla task show ID` | Metadata (incl. dependencies and inherited fields) plus the task file |
 | `tavla task edit ID [--title T] [--status S] [--priority P\|none] [--due DATE\|none] [-g GOAL\|none] [--after …] [--tags …]` | Change the given fields; with no options, edit the task file in `$EDITOR` |
 | `tavla task start ID` / `task done ID` | Mark a task `doing` / `done` (`done` reports tasks it unblocks) |
+| `tavla task check ID [N\|TEXT…]` / `task uncheck ID N\|TEXT…` | Tick / untick subtasks by number or text; with none, `check` lists them numbered |
+| `tavla task subtask ID TEXT…` | Add an unchecked subtask |
+| `tavla task note ID TEXT…` | Add a timestamped line to the task's `## Updates` |
+| `tavla task drop ID [-y]` | Delete a task (asks first). Refused while other tasks depend on it |
 | **Ideas** | |
 | `tavla idea add TEXT… [-p P \| -g G \| -t T]` | Add an idea (default: the inbox) |
 | `tavla idea list [-p P \| -g G \| -t T \| --all] [--tag TAG]` | Numbered ideas: the inbox, one scope, or everything |
 | `tavla idea move REF (-p P \| -g G \| -t T \| --inbox)` | Move an idea somewhere else |
 | `tavla idea promote REF (-g GOAL \| -p PROJECT) [--as-goal]` | Turn an idea into a task (or a goal); its `#tags` become tags |
 | `tavla idea drop REF` | Delete an idea |
+| **Deliverables** | |
+| `tavla deliverable add TITLE -p PROJECT [--kind K] [--venue V] [--deadline DATE] [--coauthors a,b] [--id ID]` | Create a paper, slides, dataset or code release (status `drafting`) |
+| `tavla deliverable list [-p PROJECT] [--status S] [--all]` | List by deadline (accepted/published hidden unless `--all`) |
+| `tavla deliverable show ID` | All its fields |
+| `tavla deliverable edit ID [--title T] [--status S] [--kind K] [--venue V\|none] [--deadline DATE\|none] [--coauthors …]` | Change the given fields; with no options, edit the YAML file in `$EDITOR` |
+| `tavla deliverable drop ID [-y]` | Delete a deliverable (asks first) |
 
 An idea **REF** is `[SCOPE:]N` or `[SCOPE:]TEXT`: SCOPE is `inbox` (the default)
 or a project/goal/task id, N the number `idea list` shows, TEXT any unique piece
@@ -193,7 +206,7 @@ year) while editing a file by hand, tavla rewrites it to ISO when you save.
         ├── tasks/
         │   ├── outline.md     # points at its goal with `goal: intro`
         │   └── run-baseline-experiments.md
-        ├── deliverables/      # *.yaml, read by `project show` and `status`
+        ├── deliverables/      # *.yaml, managed with `tavla deliverable`
         └── subprojects/       # same shape, nested (`project add -p`)
 ```
 
@@ -248,8 +261,8 @@ things use ids, never paths.
 If tavla says your content uses an older layout, run `tavla migrate --dry-run`
 to see the plan, then `tavla migrate`. From layout v1 (tasks only), every task
 becomes a goal and each of its `## Subtasks` checkboxes becomes a task under
-that goal. It is one commit in the content repo, so `git revert HEAD` there
-undoes it. The repo must have no uncommitted changes.
+that goal. It is one commit in the content repo, so `tavla undo` reverts
+it. The repo must have no uncommitted changes.
 
 ### Where the content repo is found
 

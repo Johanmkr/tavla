@@ -263,3 +263,118 @@ def test_init_then_add_end_to_end(tmp_path, git):
     ]
     listing = runner.invoke(app, [*base, "task", "list"]).output
     assert "first-task" in listing
+
+
+# --- subtasks, notes, drop, undo, deliverables ---------------------------------------
+
+
+def test_task_check_lists_then_ticks(run, git_content, git):
+    result = run("task", "check", "draft-r")
+    assert result.exit_code == 0, result.output
+    assert "1. [x] Collect MCMC papers" in result.output
+    assert "2. [ ] Write two paragraphs" in result.output
+
+    result = run("task", "check", "draft-r", "two")
+    assert result.exit_code == 0, result.output
+    assert "2. [x] Write two paragraphs" in result.output
+    assert "tv task done draft-related-work" in result.output
+    assert _head(git, git_content) == "task: check draft-related-work: Write two paragraphs"
+
+
+def test_task_check_unknown_subtask(run):
+    assert run("task", "check", "draft-r", "9").exit_code == EXIT_NOT_FOUND
+
+
+def test_task_uncheck_already_unchecked(run, git_content, git):
+    before = _head(git, git_content)
+    result = run("task", "uncheck", "draft-r", "2")
+    assert result.exit_code == 0, result.output
+    assert "Already unchecked." in result.output
+    assert _head(git, git_content) == before
+
+
+def test_task_subtask_and_note(run, git_content):
+    assert run("task", "subtask", "draft-r", "Write", "the", "end").exit_code == 0
+    result = run("task", "note", "draft-r", "Found two more papers")
+    assert result.exit_code == 0, result.output
+    assert "Noted on draft-related-work: Found two more papers" in result.output
+    task = Content.open(git_content).task("draft-r")
+    assert task.subtasks[-1].text == "Write the end"
+    assert ": Found two more papers\n" in task.path.read_text()
+
+
+def test_goal_note(run, git_content, git):
+    result = run("goal", "note", "write-intro", "shorter please")
+    assert result.exit_code == 0, result.output
+    assert _head(git, git_content) == "goal: note write-intro: shorter please"
+
+
+def test_task_drop_asks_first(run, git_content, git):
+    before = _head(git, git_content)
+    result = runner.invoke(
+        app, ["--content-dir", str(git_content), "task", "drop", "fix-plot"], input="n\n"
+    )
+    assert result.exit_code != 0
+    assert _head(git, git_content) == before
+
+    result = runner.invoke(
+        app, ["--content-dir", str(git_content), "task", "drop", "fix-plot"], input="y\n"
+    )
+    assert result.exit_code == 0, result.output
+    assert _head(git, git_content) == "task: drop fix-plot-colors"
+
+
+def test_task_drop_refused_before_asking(run):
+    result = run("task", "drop", "draft-r", "--yes")
+    assert result.exit_code == EXIT_INVALID
+    assert "get-feedback-from-advisor" in result.output
+    assert "?" not in result.output  # no confirmation question
+
+
+def test_goal_drop(run, git_content, git):
+    assert run("goal", "add", "Scratch", "-p", "project-b").exit_code == 0
+    result = run("goal", "drop", "scratch", "-y")
+    assert result.exit_code == 0, result.output
+    assert _head(git, git_content) == "goal: drop scratch"
+
+
+def test_undo(run, git_content, git):
+    assert run("task", "drop", "fix-plot", "-y").exit_code == 0
+    result = run("undo", "-n")
+    assert "Would undo: task: drop fix-plot-colors" in result.output
+    assert _head(git, git_content) == "task: drop fix-plot-colors"
+
+    result = run("undo")
+    assert result.exit_code == 0, result.output
+    assert "Undoing: task: drop fix-plot-colors" in result.output
+    assert Content.open(git_content).task("fix-plot-colors")
+    assert run("undo").output == "Nothing to undo.\n"
+
+
+def test_deliverable_lifecycle(run, git_content, git):
+    result = run(
+        "deliverable", "add", "Group talk", "-p", "project-b", "--kind", "slides",
+        "--deadline", "02.10.2026", "--coauthors", "ann,bob",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    assert "Added deliverable group-talk to project-b" in result.output
+
+    result = run("deliverable", "edit", "group", "--status", "accepted", "--coauthors", "-bob")
+    assert result.exit_code == 0, result.output
+    d = Content.open(git_content).deliverable("group-talk")
+    assert (d.status, d.coauthors, d.deadline) == ("accepted", ["ann"], dt.date(2026, 10, 2))
+
+    listed = run("deliverable", "list").output
+    assert "neurips-paper" in listed and "group-talk" not in listed  # accepted: hidden
+    assert "group-talk" in run("deliverable", "list", "--all").output
+    assert "coauthors: ann" in run("deliverable", "show", "group").output
+
+    assert run("deliverable", "drop", "group", "-y").exit_code == 0
+    assert _head(git, git_content) == "deliverable: drop group-talk"
+
+
+def test_deliverable_edit_in_editor(run, git_content, editor):
+    editor(("status: drafting", "status: submitted"))
+    result = run("deliverable", "edit", "neurips")
+    assert result.exit_code == 0, result.output
+    assert Content.open(git_content).deliverable("neurips").status == "submitted"

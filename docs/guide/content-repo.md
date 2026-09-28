@@ -18,7 +18,7 @@
         ├── tasks/
         │   ├── outline.md     # points at its goal with `goal: intro`
         │   └── run-baseline-experiments.md
-        ├── deliverables/      # *.yaml, read by `project show` and `status`
+        ├── deliverables/      # *.yaml, managed with `tavla deliverable`
         └── subprojects/       # same shape, nested (`project add -p`)
 ```
 
@@ -50,7 +50,8 @@ cacb4ba inbox: capture try mixed precision to speed up training
 ca48ffc task: start pipeline
 ```
 
-To undo the last change, go to the content repo and run `git revert HEAD`.
+To undo the last change, run `tavla undo` (`-n` shows what it would undo first).
+It adds a revert commit, so nothing is lost; run it again to go further back.
 
 ## Syncing between machines
 
@@ -82,7 +83,7 @@ tavla migrate               # apply it as a single commit
 ```
 
 The repo must have no uncommitted changes first. To undo the migration, run
-`git revert HEAD` in the content repo.
+`tavla undo`.
 
 From layout v1 (tasks only), every task becomes a goal, and each of its
 `## Subtasks` checkboxes becomes a task under that goal.

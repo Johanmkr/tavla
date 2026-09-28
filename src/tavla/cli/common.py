@@ -40,11 +40,18 @@ class State:
         return Content.open(self.content_dir)
 
 
-def state(ctx: typer.Context, *, json_out: bool = False, content_dir: Path | None = None) -> State:
-    """Global state, with per-command ``--json`` / ``--content-dir`` folded in
-    (so they work both before and after the subcommand)."""
+def state(
+    ctx: typer.Context,
+    *,
+    json_out: bool = False,
+    content_dir: Path | None = None,
+    yes: bool = False,
+) -> State:
+    """Global state, with per-command ``--json`` / ``--content-dir`` / ``--yes``
+    folded in (so they work both before and after the subcommand)."""
     st = ctx.find_object(State) or ctx.ensure_object(State)
     st.json = st.json or json_out
+    st.yes = st.yes or yes
     if content_dir is not None:
         st.content_dir_flag = content_dir
     return st
@@ -65,6 +72,8 @@ def examples(*lines: str) -> str:
 
 
 JsonOpt = Annotated[bool, typer.Option("--json", help="Machine-readable output.")]
+YesOpt = Annotated[bool, typer.Option("--yes", "-y", help="Don't ask for confirmation.")]
+TextArg = Annotated[list[str], typer.Argument(metavar="TEXT...", help="Quotes optional.")]
 DATE_HELP = "YYYY-MM-DD, DD.MM.YYYY, DD/MM/YY, today, tomorrow, +3d, +2w or a weekday."
 TAGS_EDIT_HELP = "Replace tags (a,b) or adjust them (+a,-b)."
 CLEAR_WORDS = ("none", "-")
@@ -112,6 +121,15 @@ def print_ideas(refs: Sequence[Any], heading: str | None = "Ideas") -> None:
 
 def progress(done: int, total: int) -> str:
     return f"{done}/{total}" if total else "-"
+
+
+def drop_item(st: State, content: Content, kind: str, item: Any) -> None:
+    """Delete ``item`` after asking (unless ``--yes``); refusals come before the question."""
+    ops.check_droppable(content, item)
+    if not st.yes and not typer.confirm(f"Drop {kind} {item.id} ({item.title})?"):
+        raise typer.Abort()
+    ops.drop(content, item)
+    typer.echo(f"Dropped {kind} {item.id}")
 
 
 # Hidden: documented once as a global option, but accepted after any command too.
@@ -191,6 +209,13 @@ def complete_goal(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
 def complete_task(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     try:
         return complete_ids(incomplete, _content_for_completion(ctx).tasks())
+    except (TavlaError, OSError):
+        return []
+
+
+def complete_deliverable(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
+    try:
+        return complete_ids(incomplete, _content_for_completion(ctx).deliverables())
     except (TavlaError, OSError):
         return []
 

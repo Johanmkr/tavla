@@ -5,8 +5,8 @@ import datetime as dt
 import pytest
 
 from tavla.core import ops, parsing
-from tavla.core.entities import Priority, ProjectStatus, TaskStatus
-from tavla.core.errors import GitError, ValidationError
+from tavla.core.entities import DeliverableKind, Priority, ProjectStatus, TaskStatus
+from tavla.core.errors import AmbiguousIdError, GitError, NotFoundError, ValidationError
 from tavla.core.store import Content
 
 TODAY = dt.date(2026, 9, 25)
@@ -431,3 +431,169 @@ def test_set_fields_moves_task_to_goal(content):
     task = ops.set_fields(content, content.task("fix-plot"), {"goal": "write-intro"}, today=TODAY)
     assert task.goal == "write-intro"
     assert content.goal("write-intro").tasks_total == 4
+
+
+# --- subtasks & updates --------------------------------------------------------
+
+
+def test_task_subtasks_are_numbered(content):
+    task = content.task("draft-related-work")
+    assert [(s.number, s.text, s.done) for s in task.subtasks] == [
+        (1, "Collect MCMC papers", True),
+        (2, "Write two paragraphs", False),
+    ]
+
+
+def test_resolve_subtask_by_number_or_text(content):
+    task = content.task("draft-related-work")
+    assert ops.resolve_subtask(task, "2").text == "Write two paragraphs"
+    assert ops.resolve_subtask(task, "MCMC").number == 1
+    with pytest.raises(NotFoundError, match="no subtask 3"):
+        ops.resolve_subtask(task, "3")
+    with pytest.raises(NotFoundError, match="matching 'zebra'"):
+        ops.resolve_subtask(task, "zebra")
+    with pytest.raises(AmbiguousIdError):
+        ops.resolve_subtask(task, "e")
+
+
+def test_check_and_uncheck_subtasks(content, git):
+    task = content.task("draft-related-work")
+    edited = ops.check_subtasks(content, task, [task.subtasks[1]], today=TODAY)
+    assert (edited.subtasks_done, edited.subtasks_total) == (2, 2)
+    assert "- [x] Write two paragraphs\n" in task.path.read_text()
+    assert edited.updated == TODAY
+    assert _subjects(git, content.root)[0] == "task: check draft-related-work: Write two paragraphs"
+
+    edited = ops.check_subtasks(content, edited, edited.subtasks, done=False, today=TODAY)
+    assert edited.subtasks_done == 0
+    assert _subjects(git, content.root)[0] == "task: uncheck draft-related-work: 2 subtasks"
+    assert _is_clean(git, content.root)
+
+
+def test_check_subtasks_already_done_is_a_no_op(content, git):
+    task = content.task("draft-related-work")
+    before = _subjects(git, content.root)
+    assert ops.check_subtasks(content, task, [task.subtasks[0]]) is None
+    assert _subjects(git, content.root) == before
+
+
+def test_add_subtask_appends_to_section(content, git):
+    task = ops.add_subtask(content, content.task("draft-r"), "  Write   the conclusion ")
+    assert task.subtasks[-1].text == "Write the conclusion"
+    assert "- [ ] Write two paragraphs\n- [ ] Write the conclusion\n\n## Ideas" in (
+        task.path.read_text()
+    )
+    assert _subjects(git, content.root)[0] == (
+        "task: subtask draft-related-work: Write the conclusion"
+    )
+
+
+def test_add_subtask_creates_missing_section(content):
+    task = content.task("draft-r")
+    task.path.write_text(task.path.read_text().replace("## Subtasks\n", ""))
+    task = ops.add_subtask(content, task, "New one")
+    text = task.path.read_text()
+    assert text.index("## Subtasks\n- [ ] New one") < text.index("## Ideas")
+
+
+def test_add_update_to_goal_and_task(content, git):
+    now = dt.datetime(2026, 9, 25, 14, 3)  # noqa: DTZ001 — updates store naive local time
+    ops.add_update(content, content.goal("write-intro"), "Advisor wants it shorter", now=now)
+    goal = content.goal("write-intro")
+    assert goal.path.read_text().endswith(
+        "- 2026-09-20: Started related work section\n- 2026-09-25 14:03: Advisor wants it shorter\n"
+    )
+    assert goal.updated == TODAY
+    assert _subjects(git, content.root)[0] == "goal: note write-intro: Advisor wants it shorter"
+
+    ops.add_update(content, content.task("draft-r"), "one", now=now)
+    ops.add_update(content, content.task("draft-r"), "two", now=now)
+    text = content.task("draft-r").path.read_text()
+    assert text.endswith("## Updates\n- 2026-09-25 14:03: one\n- 2026-09-25 14:03: two\n")
+
+
+def test_add_update_rejects_empty_text(content):
+    with pytest.raises(ValidationError, match="empty"):
+        ops.add_update(content, content.task("draft-r"), "  ")
+
+
+# --- drop --------------------------------------------------------------------------
+
+
+def test_drop_task(content, git):
+    task = content.task("fix-plot-colors")
+    ops.drop(content, task)
+    assert not task.path.exists()
+    assert "fix-plot-colors" not in [t.id for t in content.tasks()]
+    assert _subjects(git, content.root)[0] == "task: drop fix-plot-colors"
+    assert _is_clean(git, content.root)
+
+
+def test_drop_task_refused_while_others_depend_on_it(content):
+    task = content.task("draft-related-work")
+    with pytest.raises(ValidationError, match="get-feedback-from-advisor"):
+        ops.drop(content, task)
+    assert task.path.exists()
+
+
+def test_drop_goal_refused_while_it_has_tasks(content):
+    with pytest.raises(ValidationError, match="still has tasks"):
+        ops.drop(content, content.goal("write-intro"))
+
+
+def test_drop_deliverable(content, git):
+    ops.drop(content, content.deliverable("neurips-paper"))
+    assert content.deliverables() == []
+    assert _subjects(git, content.root)[0] == "deliverable: drop neurips-paper"
+
+
+# --- deliverables --------------------------------------------------------------------
+
+
+def test_add_deliverable(content, git):
+    d = ops.add_deliverable(
+        content,
+        "Group talk",
+        content.project("project-b"),
+        kind=DeliverableKind.SLIDES,
+        venue="Lab  meeting",
+        deadline=dt.date(2026, 10, 2),
+        coauthors=["ann"],
+    )
+    assert (d.id, d.kind, d.status, d.venue, d.project) == (
+        "group-talk",
+        "slides",
+        "drafting",
+        "Lab meeting",
+        "project-b",
+    )
+    assert d.path.read_text() == (
+        "id: group-talk\ntitle: Group talk\nkind: slides\nstatus: drafting\n"
+        "venue: Lab meeting\ndeadline: 2026-10-02\ncoauthors: [ann]\n"
+    )
+    assert _subjects(git, content.root)[0] == "deliverable: add group-talk"
+
+
+def test_add_deliverable_id_must_be_unique(content):
+    with pytest.raises(ValidationError, match="already used"):
+        ops.add_deliverable(content, "x", content.project("project-a"), id="write-intro")
+
+
+def test_set_deliverable_fields(content, git):
+    d = content.deliverable("neurips")
+    edited = ops.set_deliverable_fields(
+        content, d, {"status": "submitted", "deadline": None, "venue": "ICML 2027"}
+    )
+    assert (edited.status, edited.deadline, edited.venue) == ("submitted", None, "ICML 2027")
+    assert _subjects(git, content.root)[0] == (
+        "deliverable: edit neurips-paper (status, deadline, venue)"
+    )
+    assert ops.set_deliverable_fields(content, edited, {"status": "submitted"}) is None
+
+
+def test_set_deliverable_fields_rejects_invalid_status(content):
+    d = content.deliverable("neurips")
+    original = d.path.read_text()
+    with pytest.raises(ValidationError, match="invalid status"):
+        ops.set_deliverable_fields(content, d, {"status": "rejected-forever"})
+    assert d.path.read_text() == original

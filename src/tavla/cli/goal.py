@@ -11,8 +11,11 @@ from tavla.cli.common import (
     TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
+    TextArg,
+    YesOpt,
     complete_goal,
     complete_project,
+    drop_item,
     edit_until_valid,
     emit_json,
     examples,
@@ -128,6 +131,35 @@ def done(ctx: typer.Context, goal_id: GoalArg, content_dir: ContentDirOpt = None
             fg=typer.colors.YELLOW,
             err=True,
         )
+
+
+@app.command(epilog=examples('tv goal note write-intro "Advisor wants a shorter intro"'))
+@handles_errors
+def note(
+    ctx: typer.Context, goal_id: GoalArg, text: TextArg, content_dir: ContentDirOpt = None
+) -> None:
+    """Add a timestamped line to the goal's ## Updates section."""
+    content = state(ctx, content_dir=content_dir).content()
+    goal = content.goal(goal_id)
+    entry = ops.add_update(content, goal, " ".join(text))
+    typer.echo(f"Noted on {goal.id}: {entry.text}")
+
+
+@app.command()
+@handles_errors
+def drop(
+    ctx: typer.Context,
+    goal_id: GoalArg,
+    yes: YesOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Delete a goal (it stays in git history; `tv undo` brings it back).
+
+    Refused while tasks still belong to it.
+    """
+    st = state(ctx, content_dir=content_dir, yes=yes)
+    content = st.content()
+    drop_item(st, content, "goal", content.goal(goal_id))
 
 
 @app.command(

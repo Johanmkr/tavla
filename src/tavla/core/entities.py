@@ -138,6 +138,7 @@ LOG_FILE = "log.md"
 IDEAS_FILE = "ideas.md"
 REFERENCES_FILE = "references.yaml"
 IDEAS_HEADING = "Ideas"
+UPDATES_HEADING = "Updates"
 
 
 @dataclass
@@ -222,6 +223,15 @@ class Goal:
 
 
 @dataclass
+class Subtask:
+    """A checkbox item in a task's ``## Subtasks`` section, numbered from 1."""
+
+    number: int
+    text: str
+    done: bool
+
+
+@dataclass
 class Task:
     """A unit of work (``tasks/<id>.md``), optionally under a goal, with a
     ``## Subtasks`` checklist and optional dependencies on other tasks.
@@ -245,6 +255,7 @@ class Task:
     due: dt.date | None = None
     subtasks_done: int = 0
     subtasks_total: int = 0
+    subtasks: list[Subtask] = field(default_factory=list)
     # Filled in by the store: unfinished dependencies, and inherited fields.
     waiting_on: list[str] = field(default_factory=list)
     inherited: list[str] = field(default_factory=list)
@@ -262,7 +273,10 @@ class Task:
         task pointing at a stale project."""
         meta, body = parsing.read_markdown(path)
         id_ = _require_id(meta, path)
-        done, total = parsing.count_subtasks(body)
+        subtasks = [
+            Subtask(n, text, done)
+            for n, (_, done, text) in enumerate(parsing.checkbox_items(body), start=1)
+        ]
         depends_on = _str_list(meta.get("depends_on"), "depends_on", path)
         if id_ in depends_on:
             raise ValidationError(f"{path}: task can't depend on itself")
@@ -279,8 +293,9 @@ class Task:
             created=_date(meta.get("created"), "created", path),
             updated=_date(meta.get("updated"), "updated", path),
             due=_date(meta.get("due"), "due", path),
-            subtasks_done=done,
-            subtasks_total=total,
+            subtasks_done=sum(s.done for s in subtasks),
+            subtasks_total=len(subtasks),
+            subtasks=subtasks,
             body=body,
             meta=meta,
         )

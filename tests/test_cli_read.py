@@ -211,7 +211,7 @@ def test_short_help_flag_at_every_level(args):
 
 def test_top_level_help_groups_commands_into_panels():
     result = runner.invoke(app, ["--help"])
-    for panel in ("Daily", "Projects, goals, tasks and ideas", "Setup and maintenance"):
+    for panel in ("Daily", "Projects and what's in them", "Setup and maintenance"):
         assert panel in result.output
 
 

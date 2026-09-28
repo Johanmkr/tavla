@@ -66,9 +66,9 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     old id are updated automatically.
 
 ??? question "How do I undo a mistake?"
-    Every change is a git commit. Go to the content repo and run
-    `git revert HEAD` to undo the last one, or check `git log` to find an
-    older one.
+    Every change is a git commit. `tavla undo` reverts the last one (as a
+    new commit, so nothing is lost); run it again to go further back, or
+    `tavla undo -n` to see what it would undo first.
 
 ??? question "How do I move a task to another project?"
     Move its file into the other project's `tasks/` folder and commit.
@@ -118,5 +118,5 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
 
 ??? question "tavla says my content uses an older layout."
     Run `tavla migrate --dry-run` to see the plan, then `tavla migrate`. It's
-    a single commit, so `git revert HEAD` in the content repo undoes it. The
+    a single commit, so `tavla undo` reverts it. The
     repo must have no uncommitted changes first.
