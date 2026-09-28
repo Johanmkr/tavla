@@ -39,6 +39,47 @@ def test_project_add_invalid_priority(run):
     assert run("project", "add", "X", "--priority", "urgent").exit_code != 0
 
 
+def test_project_add_subproject(run, git_content, git):
+    result = run("project", "add", "Sensitivity study", "-p", "project-a")
+    assert result.exit_code == 0, result.output
+    assert "Added project sensitivity-study under project-a" in result.output
+    assert Content.open(git_content).project("sensitivity-study").parent == "project-a"
+    assert _head(git, git_content) == "project: add sensitivity-study under project-a"
+
+
+def test_project_edit_parent(run, git_content, git):
+    result = run("project", "edit", "project-b", "--parent", "project-a", "--priority", "high")
+    assert result.exit_code == 0, result.output
+    assert "Moved project project-b under project-a" in result.output
+    assert "Saved project project-b" in result.output
+    project = Content.open(git_content).project("project-b")
+    assert (project.parent, project.priority) == ("project-a", "high")
+    subjects = git(git_content, "log", "-2", "--format=%s").splitlines()
+    assert subjects == [
+        "project: edit project-b (priority)",
+        "project: move project-b under project-a",
+    ]
+
+    result = run("project", "edit", "project-b", "-p", "none")
+    assert result.exit_code == 0, result.output
+    assert "Moved project project-b to top level" in result.output
+    assert Content.open(git_content).project("project-b").parent is None
+
+
+def test_project_edit_parent_unchanged(run, git_content, git):
+    before = _head(git, git_content)
+    result = run("project", "edit", "ablations", "-p", "project-a")
+    assert result.exit_code == 0, result.output
+    assert "No changes." in result.output
+    assert _head(git, git_content) == before
+
+
+def test_project_edit_parent_cycle_rejected(run):
+    result = run("project", "edit", "project-a", "-p", "ablations")
+    assert result.exit_code == EXIT_INVALID
+    assert "inside it" in result.output
+
+
 def test_task_add(run, git_content, git):
     result = run(
         "task", "add", "Fix sampler bug", "-p", "project-a", "--due", "tomorrow", "--id", "sampler"

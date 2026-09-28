@@ -109,7 +109,45 @@ tavla refuses unknown ids, self-dependencies and cycles.
 
 ## Subprojects
 
-A project can contain subprojects under `subprojects/<id>/`, with the same
-structure as a top-level project. For now you create them by hand (copy a
-`project.yaml` and make `goals/` and `tasks/` folders). Everything else works
-on them as normal, and a subproject of a paused project counts as paused.
+A project can contain subprojects, each with the same structure as a
+top-level project. They're useful for a self-contained strand of work inside
+a bigger project, like the ablation studies for a paper or one chapter of a
+thesis.
+
+```console
+$ tv project add "Ablation studies" -p thesis --id ablations
+Added project ablations under thesis
+$ tv goal add "Run grid" -p ablations
+Added goal run-grid to ablations
+```
+
+Subprojects can be nested as deeply as you like. `project list` indents them
+under their parent, and `project show` lists them.
+
+How subprojects behave:
+
+- **Everything else works on them as normal.** Goals, tasks, ideas, logs and
+  ids work exactly as they do in any other project.
+- **`-p` includes them.** `next -p`, `goal list -p` and `task list -p` on a
+  parent include its subprojects.
+- **They follow their parent's pause.** A subproject of a paused project
+  counts as paused.
+- **Activity counts for the parent.** A parent isn't flagged as stale while
+  one of its subprojects is active.
+
+### Moving projects around
+
+`project edit -p` moves a project under another one, or back to the top level
+with `none`:
+
+```console
+$ tv project edit side -p thesis
+Moved project side under thesis
+$ tv project edit side -p none
+Moved project side to top level
+```
+
+The project's folder moves with everything in it, including its own
+subprojects. Its goals and tasks keep their ids, so nothing else needs to
+change. tavla refuses to move a project into itself or into one of its own
+subprojects.

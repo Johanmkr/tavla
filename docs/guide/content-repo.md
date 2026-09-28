@@ -19,7 +19,7 @@
         │   ├── outline.md     # points at its goal with `goal: intro`
         │   └── run-baseline-experiments.md
         ├── deliverables/      # *.yaml, read by `project show` and `status`
-        └── subprojects/       # same shape, nested
+        └── subprojects/       # same shape, nested (`project add -p`)
 ```
 
 Links between things always use **ids**, never paths. A goal's or task's

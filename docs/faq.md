@@ -75,6 +75,12 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     Remove its `goal:` first if that goal belongs to the old project. Links
     use ids, not paths, so nothing else needs to change.
 
+??? question "How do I make a subproject, or move a project under another?"
+    Use `tv project add NAME -p PARENT` to create one, and
+    `tv project edit ID -p PARENT` to move an existing project under
+    another. `-p none` moves it back to the top level. See
+    [Subprojects](guide/organising-work.md#subprojects).
+
 ??? question "Can I turn a goal into a task, or an idea into a task?"
     Yes: use `tv goal to-task ID` and `tv idea promote REF -g GOAL`. A goal
     can only be converted once it has no tasks, and only within the same

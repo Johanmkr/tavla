@@ -16,6 +16,7 @@ from tavla.cli.common import (
     emit_json,
     fmt_date,
     handles_errors,
+    is_clear,
     print_ideas,
     progress,
     state,
@@ -41,12 +42,25 @@ def add(
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the name).")
     ] = None,
+    parent_id: Annotated[
+        str | None,
+        typer.Option(
+            "--parent",
+            "-p",
+            help="Create it as a subproject of this project.",
+            autocompletion=complete_project,
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Create a new project and commit it."""
+    """Create a new project (or, with -p, a subproject) and commit it."""
     content = state(ctx, content_dir=content_dir).content()
-    project = ops.add_project(content, name, id=id_, priority=priority, tags=ops.parse_tags(tags))
-    typer.echo(f"Added project {project.id}")
+    parent = content.project(parent_id) if parent_id else None
+    project = ops.add_project(
+        content, name, id=id_, priority=priority, tags=ops.parse_tags(tags), parent=parent
+    )
+    where = f" under {parent.id}" if parent else ""
+    typer.echo(f"Added project {project.id}{where}")
 
 
 @app.command()
@@ -58,6 +72,15 @@ def edit(
     status: Annotated[ProjectStatus | None, typer.Option("--status", help="New status.")] = None,
     priority: Annotated[Priority | None, typer.Option("--priority", help="New priority.")] = None,
     tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
+    parent_id: Annotated[
+        str | None,
+        typer.Option(
+            "--parent",
+            "-p",
+            help="Move under this project; 'none' makes it top-level.",
+            autocompletion=complete_project,
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open project.yaml in $EDITOR.
@@ -66,6 +89,14 @@ def edit(
     """
     content = state(ctx, content_dir=content_dir).content()
     project = content.project(project_id)
+    moved = None
+    if parent_id is not None:
+        parent = None if is_clear(parent_id) else content.project(parent_id)
+        moved = ops.move_project(content, project, parent)
+        if moved is not None:
+            project = moved
+            where = f"under {moved.parent}" if moved.parent else "to top level"
+            typer.echo(f"Moved project {moved.id} {where}")
     changes: dict = {}
     if title is not None:
         changes["title"] = ops.clean_title(title)
@@ -77,7 +108,14 @@ def edit(
         changes["tags"] = ops.apply_list_spec(project.tags, tags)
     if changes:
         edited = ops.set_project_fields(content, project, changes)
-        typer.echo("No changes." if edited is None else f"Saved project {edited.id}")
+        if edited is not None:
+            typer.echo(f"Saved project {edited.id}")
+        elif moved is None:
+            typer.echo("No changes.")
+        return
+    if parent_id is not None:
+        if moved is None:
+            typer.echo("No changes.")
         return
     session = ops.EditSession(project.path / PROJECT_FILE)
     edited = edit_until_valid(session, lambda: ops.finish_project_edit(content, project, session))
