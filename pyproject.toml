@@ -1,10 +1,10 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "tavla"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CLI-first, git-native research operations tool: projects, tasks, deliverables and reading material."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -31,6 +31,12 @@ docs = [
 [project.scripts]
 tavla = "tavla.cli.main:app"
 tv = "tavla.cli.main:app"
+
+[tool.hatch.version]
+# The version comes from the latest git tag: v0.2.0 -> 0.2.0, and commits
+# after it -> 0.2.1.devN+g<sha>. Release by tagging (see CONTRIBUTING.md).
+source = "vcs"
+fallback-version = "0.0.0"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/tavla"]

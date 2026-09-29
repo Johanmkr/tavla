@@ -1,12 +1,16 @@
-"""Update tavla itself from the git clone it runs from (``tavla update``).
+"""Update tavla itself (``tavla update``), in one of two ways:
 
-Only ever fast-forwards the local ``main`` to ``origin/main``: local commits,
-other branches and uncommitted changes are never touched — the update is
-refused instead, so nothing can be lost.
+- **Release install** (``uv tool install git+REPO_URL@vX.Y.Z``, what testers
+  use): find the newest ``vX.Y.Z`` tag on GitHub and reinstall from it with uv.
+- **Clone install** (``uv tool install --editable <clone>``, for development):
+  fast-forward the clone's ``main`` to ``origin/main``. Local commits, other
+  branches and uncommitted changes are never touched — the update is refused
+  instead, so nothing can be lost.
 """
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -16,6 +20,8 @@ import tavla
 from tavla.core import git_sync
 from tavla.core.errors import TavlaError
 
+REPO_URL = "https://github.com/Johanmkr/tavla"
+RELEASE_TAG_RE = re.compile(r"^v(\d+)\.(\d+)\.(\d+)$")  # pre-releases (v1.0.0rc1) are skipped
 REMOTE = "origin"
 BRANCH = "main"
 UPSTREAM = f"{REMOTE}/{BRANCH}"
@@ -101,13 +107,76 @@ def reinstall(repo: Path) -> None:
     """Reinstall the tool from ``repo`` with uv, to pick up new dependencies
     or entry points. Raises TavlaError (with the command to run by hand) if uv
     is missing or the install fails."""
-    cmd = reinstall_command(repo)
+    _run_uv(reinstall_command(repo), "the code is updated")
+
+
+def _run_uv(cmd: list[str], state: str) -> None:
     manual = " ".join(cmd)
     if shutil.which("uv") is None:
-        raise TavlaError(f"uv not found on PATH; the code is updated, finish with: {manual}")
+        raise TavlaError(f"uv not found on PATH; {state}, finish with: {manual}")
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         msg = (result.stderr or result.stdout).strip()
-        raise TavlaError(
-            f"reinstalling with uv failed: {msg}\nThe code is updated; finish with: {manual}"
+        raise TavlaError(f"installing with uv failed: {msg}\n{state.capitalize()}; run: {manual}")
+
+
+# --- release installs ---------------------------------------------------------
+
+
+@dataclass
+class ReleasePlan:
+    current: str  # installed version, e.g. "0.2.0"
+    latest: str | None  # newest release tag, e.g. "v0.3.0" (None: no releases yet)
+
+    @property
+    def up_to_date(self) -> bool:
+        return self.latest is None or version_key(self.latest[1:]) <= version_key(self.current)
+
+    @property
+    def notes_url(self) -> str:
+        return f"{REPO_URL}/releases/tag/{self.latest}"
+
+
+def version_key(version: str) -> tuple[int, int, int, int]:
+    """Order ``X.Y.Z`` versions; a development build (``0.2.1.dev3+g...``) comes
+    before the release it leads up to. Unparseable versions sort first."""
+    m = re.match(r"(\d+)\.(\d+)\.(\d+)(.*)", version)
+    if not m:
+        return (0, 0, 0, 0)
+    major, minor, patch, rest = m.groups()
+    return (int(major), int(minor), int(patch), 0 if "dev" in rest else 1)
+
+
+def latest_release(url: str | None = None) -> str | None:
+    """The newest ``vX.Y.Z`` tag at ``url`` (default REPO_URL), via ``git ls-remote``."""
+    try:
+        result = subprocess.run(
+            ["git", "ls-remote", "--tags", "--refs", url or REPO_URL],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
         )
+    except FileNotFoundError as e:
+        raise TavlaError("git executable not found on PATH") from e
+    except subprocess.TimeoutExpired as e:
+        raise TavlaError(f"timed out asking {url or REPO_URL} for releases") from e
+    if result.returncode != 0:
+        msg = (result.stderr or result.stdout).strip()
+        raise TavlaError(f"couldn't list releases at {url or REPO_URL}: {msg}")
+    tags = [line.rsplit("refs/tags/", 1)[-1] for line in result.stdout.splitlines()]
+    releases = [t for t in tags if RELEASE_TAG_RE.match(t)]
+    return max(releases, key=lambda t: version_key(t[1:]), default=None)
+
+
+def check_release(current: str | None = None) -> ReleasePlan:
+    return ReleasePlan(current or tavla.__version__, latest_release())
+
+
+def release_install_command(tag: str) -> list[str]:
+    return ["uv", "tool", "install", "--force", f"git+{REPO_URL}@{tag}"]
+
+
+def install_release(tag: str) -> None:
+    """Replace the installed tool with release ``tag``, using uv."""
+    _run_uv(release_install_command(tag), "nothing was changed")

@@ -80,3 +80,4 @@ nav:
       - Command reference: reference/cli.md
       - File formats: reference/file-formats.md
   - FAQ: faq.md
+  - Changelog: https://github.com/Johanmkr/tavla/blob/main/CHANGELOG.md

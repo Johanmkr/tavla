@@ -190,3 +190,93 @@ def test_cli_update_refusal_exit_code(clones, git, monkeypatch):
     result = runner.invoke(app, ["update"])
     assert result.exit_code == 1
     assert "switch to main" in result.output
+
+
+# --- release installs ---------------------------------------------------------
+
+
+@pytest.fixture
+def releases(clones, git, monkeypatch):
+    """Make the test origin stand in for GitHub; ``tag(name)`` adds a tag there."""
+    _, upstream = clones
+    origin = upstream.parent / "origin.git"
+    monkeypatch.setattr(self_update, "REPO_URL", str(origin))
+
+    def tag(name: str) -> None:
+        git(upstream, "tag", name)
+        git(upstream, "push", "--quiet", "origin", name)
+
+    return tag
+
+
+@pytest.mark.parametrize(
+    ("older", "newer"),
+    [
+        ("0.2.0", "0.10.0"),
+        ("0.2.1.dev3+gabc", "0.2.1"),
+        ("0.2.0", "0.2.1.dev3+gabc"),
+        ("0.0.0", "0.1.0"),
+    ],
+)
+def test_version_order(older, newer):
+    assert self_update.version_key(older) < self_update.version_key(newer)
+
+
+def test_latest_release_picks_highest_final_tag(releases):
+    assert self_update.latest_release() is None
+    for name in ["v0.2.0", "v0.10.0", "v0.9.1", "v1.0.0rc1", "experiment"]:
+        releases(name)
+    assert self_update.latest_release() == "v0.10.0"
+
+
+def test_release_plan(releases):
+    releases("v0.3.0")
+    assert not self_update.check_release("0.2.0").up_to_date
+    assert not self_update.check_release("0.3.0.dev4+gabc").up_to_date
+    assert self_update.check_release("0.3.0").up_to_date
+    assert self_update.check_release("0.3.1.dev1+gabc").up_to_date
+
+
+def test_latest_release_bad_url(monkeypatch, tmp_path):
+    monkeypatch.setattr(self_update, "REPO_URL", str(tmp_path / "missing.git"))
+    with pytest.raises(TavlaError, match="couldn't list releases"):
+        self_update.latest_release()
+
+
+def _release_install(monkeypatch, version: str) -> None:
+    def not_a_clone():
+        raise TavlaError("not a clone")
+
+    monkeypatch.setattr(self_update, "source_repo", not_a_clone)
+    monkeypatch.setattr(self_update.tavla, "__version__", version)
+
+
+def test_cli_update_release(releases, monkeypatch):
+    _release_install(monkeypatch, "0.2.0")
+    result = runner.invoke(app, ["update"])
+    assert "no releases published yet" in result.output
+
+    releases("v0.2.0")
+    assert "is up to date" in runner.invoke(app, ["update"]).output
+
+    releases("v0.3.0")
+    result = runner.invoke(app, ["update", "--check"])
+    assert result.exit_code == 0, result.output
+    assert "tavla v0.3.0 is available (you have 0.2.0)" in result.output
+    assert "/releases/tag/v0.3.0" in result.output
+
+    uv = FakeUv(monkeypatch)
+    result = runner.invoke(app, ["update"])
+    assert result.exit_code == 0, result.output
+    assert "Updated tavla 0.2.0 -> 0.3.0." in result.output
+    assert uv.calls == [["uv", "tool", "install", "--force", f"git+{self_update.REPO_URL}@v0.3.0"]]
+
+
+def test_cli_update_release_uv_failure(releases, monkeypatch):
+    _release_install(monkeypatch, "0.2.0")
+    releases("v0.3.0")
+    FakeUv(monkeypatch, returncode=1, stderr="no network")
+    result = runner.invoke(app, ["update"])
+    assert result.exit_code == 1
+    assert "no network" in result.output
+    assert "Nothing was changed; run: uv tool install --force git+" in result.output

@@ -32,3 +32,33 @@ uv pip install -e '.[docs]'
 
 Pushes to `main` that touch `docs/`, `mkdocs.yml` or `src/tavla/cli/` rebuild
 and publish the site via `.github/workflows/docs.yml`.
+
+## Releasing
+
+Releases are git tags on `main`; there is no release branch. The version is
+never written by hand: hatch-vcs reads it from the latest tag (`v0.3.0` →
+`0.3.0`; later commits build as `0.3.1.devN+g<sha>`).
+
+1. Make sure `main` is green and `.venv/bin/pytest` passes locally.
+2. In `CHANGELOG.md`, rename `## [Unreleased]` to `## [0.3.0] - YYYY-MM-DD`
+   and add a fresh empty `## [Unreleased]` above it. If the content layout
+   changed, say so under **Upgrading** (and `SCHEMA_VERSION` must have been
+   bumped with a migration, see above). Commit this.
+3. Tag and push:
+
+   ```sh
+   git tag -a v0.3.0 -m "tavla 0.3.0"
+   git push origin v0.3.0
+   ```
+
+4. `.github/workflows/release.yml` then runs the tests, builds the wheel,
+   checks its version matches the tag, and creates the GitHub Release with the
+   wheel attached and the changelog section as its notes. It fails if the
+   changelog has no section for the version.
+
+Testers install a release with
+`uv tool install git+https://github.com/Johanmkr/tavla@v0.3.0`, and
+`tavla update` moves them to the newest `vX.Y.Z` tag. Tags with a suffix
+(`v1.0.0rc1`) become GitHub pre-releases and are skipped by `tavla update`.
+Update the version in the install lines of `README.md` and
+`docs/getting-started.md` when you release.
