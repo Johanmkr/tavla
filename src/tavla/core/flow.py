@@ -213,6 +213,7 @@ def _task_warnings(task: Task, all_tasks: Mapping[str, Task], today: dt.date) ->
             and dep is not None
             and dep.status != TaskStatus.DONE
             and dep.due is not None
+            and "due" not in dep.inherited  # the goal's deadline isn't the task's own
             and dep.due > task.due
         ):
             out.append(f"due before {dep.id} ({dep.due.isoformat()})")
