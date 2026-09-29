@@ -15,7 +15,10 @@ Update with `tavla update` (`--check` to see what's new first).
 - `tavla flow PROJECT|GOAL`: a dependency board. It shows a project's goals,
   or a goal's tasks, in stages of work that can run in parallel, with arrows
   and `after:` notes for the dependencies. Use `--open` to show only what's
-  left, and `--json` to get the board as data.
+  left, and `--json` to get the board as data. Cards mark tasks in progress,
+  flag overdue work and tasks due before their prerequisites, and a
+  "Ready now" line lists what you can start. `--by status` shows a kanban
+  board instead, and `--format mermaid` prints the board as a diagram.
 - `tavla goal list -p PROJECT` now lists the goals of each subproject
   under their own heading.
 - Goal and task lists (and `show`) warn when a file's `project:` line names

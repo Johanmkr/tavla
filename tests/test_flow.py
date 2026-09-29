@@ -1,17 +1,19 @@
 from __future__ import annotations
 
+import datetime as dt
 import json
 
 import pytest
 from typer.testing import CliRunner
 
-from tavla.cli.flow import arrange
+from tavla.cli.flow import arrange, plan_columns, split
 from tavla.cli.main import app
 from tavla.core import flow
 from tavla.core.flow import CardState
 from tavla.core.store import Content
 
 runner = CliRunner()
+TODAY = dt.date(2026, 9, 25)
 
 
 def ids(board: flow.Board) -> list[list[str]]:
@@ -49,9 +51,19 @@ def test_stages_empty():
 
 
 def write_task(
-    root, id_, *, goal=None, depends_on=(), status="todo", subtasks=(), project="project-a"
+    root,
+    id_,
+    *,
+    goal=None,
+    depends_on=(),
+    status="todo",
+    subtasks=(),
+    project="project-a",
+    due=None,
 ):
     lines = ["---", f"id: {id_}", f"status: {status}"]
+    if due:
+        lines.append(f"due: {due}")
     if goal:
         lines.append(f"goal: {goal}")
     if depends_on:
@@ -138,18 +150,97 @@ def test_project_board_missing_dependency(content_copy):
     assert ("no-such-task", "orphan") in board.edges()
 
 
+def test_doing_is_its_own_state(content_copy):
+    write_task(content_copy, "started", goal="write-methods", status="doing")
+    content = Content.open(content_copy)
+    board = flow.goal_board(content, content.goal("write-methods"))
+    assert board.stages[0][0].state == CardState.DOING
+    assert board.goal.state == CardState.DOING
+
+
+def test_warnings_overdue_and_due_before_prerequisite(content_copy):
+    write_task(content_copy, "late", goal="write-methods", due="2026-09-01")
+    write_task(content_copy, "first", goal="write-methods", due="2026-10-20")
+    write_task(content_copy, "second", goal="write-methods", due="2026-10-10", depends_on=["first"])
+    content = Content.open(content_copy)
+    board = flow.goal_board(content, content.goal("write-methods"), today=TODAY)
+    cards = {c.id: c for c in board.cards()}
+    assert cards["late"].warnings == ["overdue (due 2026-09-01)"]
+    assert cards["second"].warnings == ["due before first (2026-10-20)"]
+    assert cards["first"].warnings == []
+    project = flow.project_board(content, content.project("project-a"), today=TODAY)
+    methods = next(c for c in project.cards() if c.id == "write-methods")
+    assert "late: overdue (due 2026-09-01)" in methods.warnings
+    assert "second: due before first (2026-10-20)" in methods.warnings
+
+
+def test_inherited_overdue_is_reported_once_on_the_goal(content):
+    board = flow.project_board(content, content.project("project-a"), today=dt.date(2026, 12, 1))
+    intro = next(c for c in board.cards() if c.id == "write-intro")
+    assert intro.warnings[0] == "overdue (due 2026-10-01)"
+    assert not any("draft-related-work: overdue" in w for w in intro.warnings)
+
+
+def test_status_board_project(content):
+    board = flow.status_board(content, content.project("project-a"))
+    assert board.by == "status"
+    assert [c.label for c in board.columns] == ["todo", "doing", "blocked", "done"]
+    todo = [c.id for c in board.columns[0].cards]
+    # Startable tasks first, in `next` order; waiting ones after.
+    assert todo[:3] == ["draft-related-work", "wait-for-cluster-allocation", "fix-plot-colors"]
+    feedback = next(c for c in board.cards() if c.id == "get-feedback-from-advisor")
+    assert feedback.state == CardState.WAITING
+    assert feedback.after == ["draft-related-work"]
+    assert feedback.goal == "write-intro"
+
+
+def test_status_board_goal_open_only(content):
+    board = flow.status_board(content, content.goal("write-intro"), open_only=True)
+    assert [c.label for c in board.columns] == ["todo", "doing", "blocked"]
+    assert {c.id for c in board.cards()} == {"draft-related-work", "get-feedback-from-advisor"}
+    assert all(c.goal is None for c in board.cards())  # same goal for all: not repeated
+
+
 def test_arrange_links_prerequisite_rows(content):
     board = flow.goal_board(content, content.goal("write-intro"))
-    columns, arrows = arrange(board)
+    columns, arrows = arrange(board.stages)
     assert columns[1][0].id == "get-feedback-from-advisor"
     assert arrows == {("draft-related-work", "get-feedback-from-advisor")}
+
+
+def test_plan_columns_spreads_tall_columns_when_wide():
+    assert plan_columns([5], 80) == ([2], 34)
+    assert plan_columns([5], 130)[0] == [3]
+    # Short columns aren't split, however wide the terminal.
+    assert plan_columns([2, 1], 200) == ([1, 1], 34)
+    # Too narrow for one column per stage: caller falls back to stacking.
+    assert plan_columns([1, 1, 1, 1], 60) is None
+
+
+def test_split_puts_cards_feeding_the_next_column_last():
+    cards = [flow.Card(i, "task", i, CardState.READY) for i in "abcd"]
+    parts = split(cards, 2, feeds_next={"a"})
+    assert [[c.id for c in p] for p in parts] == [["b", "c"], ["d", "a"]]
+
+
+def test_ready_lists_startable_tasks_in_next_order(content):
+    board = flow.project_board(content, content.project("project-a"))
+    assert [i.id for i in board.ready] == [
+        "draft-related-work",
+        "wait-for-cluster-allocation",
+        "fix-plot-colors",
+    ]
+    goal = flow.goal_board(content, content.goal("write-intro"))
+    assert [i.id for i in goal.ready] == ["draft-related-work"]
 
 
 # --- CLI ----------------------------------------------------------------------
 
 
 @pytest.fixture
-def run(content):
+def run(content, monkeypatch):
+    monkeypatch.setattr("tavla.core.dates.local_today", lambda: TODAY)
+
     def _run(*args: str):
         return runner.invoke(app, ["--content-dir", str(content.root), "flow", *args])
 
@@ -186,12 +277,51 @@ def test_cli_item_limit(run):
     assert "… 1 more" in result.output
 
 
+def test_cli_ready_footer(run):
+    result = run("write-intro", "--width", "120")
+    assert "Ready now: ● draft-related-work" in result.output
+
+
+def test_cli_shows_warnings(run, content):
+    write_task(content.root, "late", goal="write-intro", due="2026-09-01")
+    result = run("write-intro", "--width", "120")
+    assert "! overdue (due 2026-09-01)" in result.output
+
+
+def test_cli_by_status(run):
+    result = run("project-a", "--by", "status", "--width", "140")
+    assert result.exit_code == 0, result.output
+    assert "TODO (" in result.output and "DONE (" in result.output
+    assert "──▶" not in result.output
+
+
+def test_cli_mermaid(run):
+    result = run("write-intro", "--format", "mermaid")
+    assert result.exit_code == 0, result.output
+    out = result.output
+    assert out.startswith('---\ntitle: "Goal: Write introduction section"\n---\nflowchart LR')
+    assert 'subgraph c0["Stage 1"]' in out
+    assert '["● Draft related work<br/>due 2026-10-01<br/>1/2"]' in out
+    assert "n0 --> n2" in out  # draft-related-work unblocks the advisor feedback
+    assert "-.-> n3" in out  # into the goal
+    assert "class n0 st_ready" in out
+
+
+def test_cli_mermaid_escapes_labels(run, content):
+    write_task(content.root, "quote", goal="write-intro")
+    path = content.root / "projects/project-a/tasks/quote.md"
+    path.write_text(path.read_text().replace("# Quote", '# Say "hi" <b>'))
+    out = run("write-intro", "-f", "mermaid").output
+    assert "Say #quot;hi#quot; #lt;b#gt;" in out
+
+
 def test_cli_json(run):
     result = run("write-methods", "--json")
     assert result.exit_code == 0, result.output
     data = json.loads(result.output)
     assert data["kind"] == "goal"
-    assert data["stages"][1][0]["after"] == ["get-feedback-from-advisor"]
+    assert data["by"] == "stage"
+    assert data["columns"][1]["cards"][0]["after"] == ["get-feedback-from-advisor"]
 
 
 def test_cli_unknown_target(run):
