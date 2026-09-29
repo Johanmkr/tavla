@@ -96,6 +96,44 @@ This example shows a few things you'll use all the time:
 - **`--after` makes a task wait.** `draft-related-work` won't show up in
   `next` until `outline` is done.
 
+### Or let tavla ask
+
+If you'd rather not remember flags, run `tv add` (or `tv add goal` to skip
+the first question). It asks what you're adding and where it goes, picked
+from a menu (type to filter long lists). Then it shows a review of every
+field, with optional ones at their defaults:
+
+```console
+$ tv add goal
+? Project project-b  Literature review on MCMC diagnostics
+? Title  (< back) Try it out
+
+  New goal
+    project   project-b
+    title     Try it out
+    id        try-it-out  (from the title)
+    priority  med
+    due       –
+    tags      –
+
+? What next? Create it
+Added goal try-it-out to project-b
+? Add another goal? No
+```
+
+- **Go back** with `← back` in a menu, or by typing `<` in a text question.
+  Your answers are kept.
+- **Change any field** from the review, including optional ones like `id`,
+  `due` or a task's dependencies. Bad input (an unknown date, a taken id) is
+  caught at the question.
+- **Add another** starts again in the same place (the same project, goal or
+  task), so adding several goals only asks for their titles.
+- **Ctrl-C** cancels at any point without adding anything.
+
+`tv add` handles projects, subprojects, goals, tasks, subtasks, ideas and
+deliverables. It needs a terminal; in scripts, use the `tv <kind> add`
+commands.
+
 ## The everyday loop
 
 ```sh

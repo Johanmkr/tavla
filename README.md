@@ -104,6 +104,7 @@ id prefixes and shows each title next to its id.
 | `tavla migrate [--dry-run]` | Upgrade an older content repo to the current layout (one commit) |
 | `tavla update [--check]` | Update tavla itself to the latest `main` (fast-forward only) |
 | `tavla check [--fix]` | Find problems in hand-edited files (unloadable files, duplicate ids, broken links, `project:` lines that disagree with the folder); `--fix` moves those files, or resets a line naming no known project |
+| `tavla add [KIND]` | Add a project, subproject, goal, task, subtask, idea or deliverable by answering questions, with a review to change any field before creating |
 | `tavla capture TEXT…` | Add an idea to the inbox (quotes optional) |
 | `tavla log PROJECT TEXT…` | Append a timestamped line to the project's `log.md` |
 | `tavla undo [-n]` | Undo the last change as a new commit (`-n`: only show it); run again to go further back |

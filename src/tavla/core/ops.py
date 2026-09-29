@@ -102,6 +102,11 @@ def _new_id(content: Content, title: str, explicit: str | None) -> str:
     return candidate
 
 
+def suggest_id(content: Content, title: str) -> str:
+    """The id a new item titled ``title`` gets when none is given."""
+    return _new_id(content, clean_title(title), None)
+
+
 def _check_unique(content: Content, id_: str, own_path: Path) -> None:
     others = [p for p in content.all_ids().get(id_, []) if p != own_path]
     if others:
