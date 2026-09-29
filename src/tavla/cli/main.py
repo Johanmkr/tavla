@@ -20,7 +20,7 @@ from tavla.cli.common import (
 )
 from tavla.core import bootstrap, history, migrate, self_update
 from tavla.core import check as checks
-from tavla.core.errors import EXIT_INVALID
+from tavla.core.errors import EXIT_INVALID, TavlaError
 
 app = typer.Typer(
     name="tavla",
@@ -227,13 +227,41 @@ def update(
         bool, typer.Option("--check", help="Only show what's new; change nothing.")
     ] = False,
 ) -> None:
-    """Update tavla to the latest version on the main branch (fast-forward only).
+    """Update tavla to the latest release.
 
-    Works when tavla is installed from a git clone (`uv tool install --editable`).
-    Refuses to touch a clone with uncommitted changes, another branch checked
-    out, or local commits that diverge from origin/main.
+    Installed from a release (`uv tool install git+…@vX.Y.Z`): reinstalls the
+    newest vX.Y.Z tag with uv. Installed from a git clone (`uv tool install
+    --editable`): fast-forwards the clone to origin/main instead, refusing if
+    it has uncommitted changes, another branch checked out, or local commits
+    that diverge from origin/main.
     """
-    repo = self_update.source_repo()
+    try:
+        repo = self_update.source_repo()
+    except TavlaError:
+        _update_release(check)
+    else:
+        _update_clone(repo, check)
+
+
+def _update_release(check: bool) -> None:
+    plan = self_update.check_release()
+    if plan.latest is None:
+        typer.echo(f"tavla {plan.current}; no releases published yet.")
+        return
+    if plan.up_to_date:
+        typer.echo(f"tavla {plan.current} is up to date (latest release: {plan.latest}).")
+        return
+    typer.secho(f"tavla {plan.latest} is available (you have {plan.current}).", bold=True)
+    typer.echo(f"What's new: {plan.notes_url}")
+    if check:
+        typer.echo("Run `tavla update` to install it.")
+        return
+    typer.echo(f"Installing {plan.latest} with uv...")
+    self_update.install_release(plan.latest)
+    typer.echo(f"Updated tavla {plan.current} -> {plan.latest[1:]}.")
+
+
+def _update_clone(repo: Path, check: bool) -> None:
     plan = self_update.check(repo)
     if plan.up_to_date:
         typer.echo(f"tavla is up to date ({plan.old[:7]}).")

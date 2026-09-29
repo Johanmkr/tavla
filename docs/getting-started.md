@@ -2,11 +2,13 @@
 
 ## Install
 
-tavla needs Python 3.11+ and `git`.
+tavla needs Python 3.11+, `git` and [uv](https://docs.astral.sh/uv/getting-started/installation/).
+Install the latest release (see the
+[releases page](https://github.com/Johanmkr/tavla/releases) for its number):
 
 ```sh
-git clone https://github.com/Johanmkr/tavla.git && cd tavla
-uv tool install --editable .     # puts `tavla` and `tv` on your PATH
+uv tool install git+https://github.com/Johanmkr/tavla@v0.2.0   # puts `tavla` and `tv` on your PATH
+tv --version
 ```
 
 Tab-completion is optional, but it's worth having. It completes command names
@@ -19,33 +21,48 @@ tv --install-completion
 
 Restart your shell afterwards.
 
+!!! tip "Back up your content"
+    Your projects live in their own git repo (created by `tavla init` below).
+    Push it to a **private** remote now and then, so a lost laptop doesn't
+    lose your notes: `git -C ~/.local/share/tavla push`.
+
 ### Updating tavla
 
 ```console
 $ tv update --check        # see what's new, change nothing
-2 new commits on origin/main:
-  1a2b3c4 ADD: ...
-  5d6e7f8 FIX: ...
-Run `tavla update` to install them.
+tavla v0.3.0 is available (you have 0.2.0).
+What's new: https://github.com/Johanmkr/tavla/releases/tag/v0.3.0
+Run `tavla update` to install it.
 $ tv update
-...
-Updated tavla in /home/you/tavla: 9f8e7d6 -> 1a2b3c4
+Installing v0.3.0 with uv...
+Updated tavla 0.2.0 -> 0.3.0.
 ```
 
-`update` pulls the latest `main` into the clone you installed from. It only
-fast-forwards, so it never merges, rebases or overwrites anything. It refuses
-to run, and tells you why, if the clone has uncommitted changes, has a branch
-other than `main` checked out, or has local commits that diverge from
-`origin/main`.
-
-Code changes take effect immediately. If the update changes `pyproject.toml`
-(new dependencies or commands), tavla also reinstalls itself with
-`uv tool install --force --editable <clone>`. If uv isn't on your PATH, or the
-reinstall fails, tavla says so and prints the command to run by hand. The
-code update itself has already been applied at that point.
+`update` finds the newest release and reinstalls it with
+`uv tool install --force git+https://github.com/Johanmkr/tavla@<tag>`. If uv
+isn't on your PATH or the install fails, nothing is changed and tavla prints
+the command to run by hand. What changed in each release is in the
+[changelog](https://github.com/Johanmkr/tavla/blob/main/CHANGELOG.md).
 
 If a new version changes the content layout, tavla will ask you to run
 `tavla migrate` (see [Upgrading the layout](guide/content-repo.md#upgrading-the-layout)).
+
+### Installing from a clone (for development)
+
+To work on tavla itself, install your clone in editable mode instead. Code
+changes then apply immediately:
+
+```sh
+git clone https://github.com/Johanmkr/tavla.git && cd tavla
+uv tool install --editable .
+```
+
+For such an install, `tv update` fast-forwards the clone to the latest `main`
+rather than to a release. It only fast-forwards, so it never merges, rebases or
+overwrites anything, and it refuses (and says why) if the clone has
+uncommitted changes, another branch checked out, or local commits that
+diverge from `origin/main`. If `pyproject.toml` changed (new dependencies or
+commands), it also reinstalls with `uv tool install --force --editable <clone>`.
 
 ## Create your content repo
 

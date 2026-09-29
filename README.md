@@ -41,19 +41,23 @@ Project            e.g. "Adaptive sampling"          project.yaml
 
 ## Install
 
-Requires Python 3.11+ and `git`.
+Requires Python 3.11+, `git` and [uv](https://docs.astral.sh/uv/). Install the
+latest [release](https://github.com/Johanmkr/tavla/releases):
 
 ```sh
-git clone <this repo> && cd tavla
-uv tool install --editable .     # puts `tavla` (and the short alias `tv`) on your PATH
+uv tool install git+https://github.com/Johanmkr/tavla@v0.2.0   # puts `tavla` (and the short alias `tv`) on your PATH
 tavla --install-completion       # optional: tab-completion for commands and ids
 tv --install-completion          # ...and the same for `tv`
 ```
 
 To update later, run `tavla update` (`--check` to just see what's new). It
-fast-forwards your clone to `origin/main` (and reinstalls with uv if
-dependencies changed). It refuses if you have local changes, another branch
-checked out, or commits that diverge from `main`.
+reinstalls the newest release with uv; see [CHANGELOG.md](CHANGELOG.md) for
+what changed.
+
+For development, install a clone instead: `uv tool install --editable .`
+inside it. `tavla update` then fast-forwards the clone to `origin/main` (and
+reinstalls with uv if dependencies changed), refusing if you have local
+changes, another branch checked out, or commits that diverge from `main`.
 
 ## Getting started
 
@@ -102,7 +106,7 @@ id prefixes and shows each title next to its id.
 | --- | --- |
 | `tavla init [--content-dir PATH]` | Create the content repo and default config |
 | `tavla migrate [--dry-run]` | Upgrade an older content repo to the current layout (one commit) |
-| `tavla update [--check]` | Update tavla itself to the latest `main` (fast-forward only) |
+| `tavla update [--check]` | Update tavla itself to the newest release (in a development clone: fast-forward to `main`) |
 | `tavla check [--fix]` | Find problems in hand-edited files (unloadable files, duplicate ids, broken links, `project:` lines that disagree with the folder); `--fix` moves those files, or resets a line naming no known project |
 | `tavla add [KIND]` | Add a project, subproject, goal, task, subtask, idea or deliverable by answering questions, with a review to change any field before creating |
 | `tavla capture TEXT…` | Add an idea to the inbox (quotes optional) |
