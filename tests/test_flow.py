@@ -174,6 +174,17 @@ def test_warnings_overdue_and_due_before_prerequisite(content_copy):
     assert "second: due before first (2026-10-20)" in methods.warnings
 
 
+def test_prerequisite_due_inherited_from_goal_is_not_a_conflict(content_copy):
+    # "first" has no due date of its own; it only inherits the goal's.
+    goal = content_copy / "projects/project-a/goals/write-methods.md"
+    assert "due: 2026-10-15" in goal.read_text()
+    write_task(content_copy, "first", goal="write-methods")
+    write_task(content_copy, "second", goal="write-methods", due="2026-10-01", depends_on=["first"])
+    content = Content.open(content_copy)
+    board = flow.goal_board(content, content.goal("write-methods"), today=TODAY)
+    assert next(c for c in board.cards() if c.id == "second").warnings == []
+
+
 def test_inherited_overdue_is_reported_once_on_the_goal(content):
     board = flow.project_board(content, content.project("project-a"), today=dt.date(2026, 12, 1))
     intro = next(c for c in board.cards() if c.id == "write-intro")

@@ -134,7 +134,7 @@ def _line(text: str, style: str = "") -> Text:
 
 def render_card(card: Card, width: int, drawn: set[tuple[str, str]], max_items: int) -> Panel:
     external = card.kind == "external"
-    head = Text(no_wrap=True, overflow="ellipsis")
+    head = Text()  # wraps: the title matters most
     head.append(f"{MARKERS[card.state]} ", style=STYLES[card.state])
     head.append(f"{OUTSIDE} " if external else "", style="dim")
     head.append(card.title, style="dim" if external else "bold")
@@ -242,9 +242,9 @@ def render(board: Board, width: int, max_items: int) -> RenderableType:
     for i, (col, parts) in enumerate(zip(board.columns, splits, strict=True)):
         following = board.stages[i + 1] if by_stage and i + 1 < len(board.stages) else []
         feeds_next = {a for c in following for a in c.after}
-        for j, sub in enumerate(split(col.cards, parts, feeds_next)):
+        for sub in split(col.cards, parts, feeds_next):
             columns.append(sub)
-            headers.append(_label(board, col) if j == 0 else "")
+            headers.append(_label(board, col))
     placed, drawn = arrange(columns)
     if not by_stage:
         drawn = set()

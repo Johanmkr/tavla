@@ -20,9 +20,10 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     [Syncing between machines](guide/content-repo.md#syncing-between-machines).
 
 ??? question "Can I try tavla without creating my own content repo?"
-    Yes. From the software repo, run
-    `tv --content-dir example-content next` (or any other read command). See
-    the [several-projects example](examples/several-projects.md).
+    Yes. `tv demo` sets up a separate playground repo with example projects
+    and tells you how to point tavla at it. Every command works there,
+    including the ones that change things. See the
+    [several-projects example](examples/several-projects.md).
 
 ??? question "Is there a difference between `tavla` and `tv`?"
     No. `tv` is just a shorter name for the same program.

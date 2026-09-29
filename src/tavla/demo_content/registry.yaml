@@ -1,0 +1,13 @@
+# Master index of top-level projects — managed by tavla.
+- id: thesis
+  path: projects/thesis
+  status: active
+- id: teaching
+  path: projects/teaching
+  status: active
+- id: review-paper
+  path: projects/review-paper
+  status: paused
+- id: bayes-course
+  path: projects/bayes-course
+  status: archived

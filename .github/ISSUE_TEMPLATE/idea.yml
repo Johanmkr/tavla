@@ -1,0 +1,21 @@
+name: Idea or wish
+description: Something tavla could do, or do differently.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation or annoyance, in your own words. This matters more than the solution.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: What would help?
+      description: A command, an option, a different default, a better message... Rough is fine.
+  - type: textarea
+    id: now
+    attributes:
+      label: What do you do today instead?
+      description: Workarounds, other tools, or "I just don't".

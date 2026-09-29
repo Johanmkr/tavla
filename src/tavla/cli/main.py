@@ -20,6 +20,8 @@ from tavla.cli.common import (
 )
 from tavla.core import bootstrap, history, migrate, self_update
 from tavla.core import check as checks
+from tavla.core import demo as demos
+from tavla.core import info as infos
 from tavla.core.errors import EXIT_INVALID, TavlaError
 
 app = typer.Typer(
@@ -227,6 +229,95 @@ def check(
             typer.echo("Run `tv check --fix` to fix the project: problems.")
     if problems:
         raise typer.Exit(EXIT_INVALID)
+
+
+@app.command(
+    rich_help_panel=SETUP,
+    epilog=examples(
+        "tv demo # set it up and show how to use it",
+        "tv demo --reset # start over with fresh content",
+    ),
+)
+@handles_errors
+def demo(
+    directory: Annotated[
+        Path | None,
+        typer.Argument(help="Where to put it (default: tavla's cache directory)."),
+    ] = None,
+    reset: Annotated[
+        bool, typer.Option("--reset", help="Replace an existing demo with fresh content.")
+    ] = False,
+) -> None:
+    """Set up a playground with example projects, to try every command safely.
+
+    The demo is a separate content repo (a PhD thesis, a teaching job, a
+    paused paper) with its dates moved to around today. Your own content is
+    never touched: point tavla at the demo with TAVLA_CONTENT_DIR or
+    --content-dir, and unset it to go back.
+    """
+    dest = (directory or config.cache_dir() / "demo").expanduser().resolve()
+    if demos.exists(dest) and not reset:
+        typer.echo(f"The demo is already set up at {dest} (--reset starts over).")
+    else:
+        demos.create(dest, reset=reset)
+        typer.echo(f"Demo content ready at {dest}")
+    shown = str(dest).replace(str(Path.home()), "~", 1)
+    typer.echo(
+        "\nTry it in this shell (your own notes are untouched):\n\n"
+        f"  export TAVLA_CONTENT_DIR={shown}\n"
+        "  tv next\n"
+        "  tv status\n"
+        "  tv flow thesis\n"
+        "  tv task done draft-methods   # write commands work too\n"
+        "  unset TAVLA_CONTENT_DIR      # back to your own content\n\n"
+        f"Or for a single command: tv --content-dir {shown} next"
+    )
+
+
+@app.command("info", rich_help_panel=SETUP)
+@handles_errors
+def info_(
+    ctx: typer.Context,
+    json_out: JsonOpt = False,
+    content_dir: Annotated[Path | None, typer.Option("--content-dir", hidden=True)] = None,
+) -> None:
+    """Versions, paths and content details, for bug reports.
+
+    Paste the output into an issue. It shows file paths (which may include your
+    user name) but nothing from your notes.
+    """
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
+    info = infos.gather(st.content_dir_flag)
+    if st.json:
+        emit_json(info)
+        return
+    if info.layout is None:
+        layout = "-"
+    elif info.layout == info.layout_expected:
+        layout = f"v{info.layout}"
+    else:
+        layout = f"v{info.layout} (this tavla uses v{info.layout_expected})"
+    content = f"{info.content_dir} (from {info.content_source})"
+    if not info.content_initialized:
+        content += ", not initialized: run `tavla init`"
+    rows = [
+        ("tavla", f"{info.tavla} ({info.install})"),
+        ("python", info.python),
+        ("platform", info.platform),
+        ("git", info.git or "not found"),
+        ("uv", info.uv or "not found"),
+        ("editor", info.editor or "not set ($EDITOR)"),
+        ("config", f"{info.config_file}{'' if info.config_exists else ' (not created)'}"),
+        ("content", content),
+        ("layout", layout),
+    ]
+    if info.counts:
+        rows.append(("contents", " · ".join(f"{n} {k}" for k, n in info.counts.items())))
+    if info.problem:
+        rows.append(("problem", info.problem))
+    width = max(len(k) for k, _ in rows)
+    for key, value in rows:
+        typer.echo(f"{key:<{width}}  {value}")
 
 
 @app.command(rich_help_panel=SETUP)

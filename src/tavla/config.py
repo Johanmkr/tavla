@@ -75,12 +75,17 @@ def _expand(value: str | os.PathLike[str]) -> Path:
 
 def resolve_content_dir(cli_value: str | os.PathLike[str] | None = None) -> Path:
     """Resolve the content directory using the documented precedence order."""
+    return content_dir_and_source(cli_value)[0]
+
+
+def content_dir_and_source(cli_value: str | os.PathLike[str] | None = None) -> tuple[Path, str]:
+    """The content directory, and which rule picked it (for ``tavla info``)."""
     if cli_value:
-        return _expand(cli_value)
+        return _expand(cli_value), "--content-dir"
     env_value = os.environ.get(ENV_CONTENT_DIR)
     if env_value:
-        return _expand(env_value)
+        return _expand(env_value), ENV_CONTENT_DIR
     cfg_value = load_config().get("content_dir")
     if cfg_value:
-        return _expand(cfg_value)
-    return default_content_dir().resolve()
+        return _expand(cfg_value), f"content_dir in {config_path()}"
+    return default_content_dir().resolve(), "default"
