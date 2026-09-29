@@ -85,7 +85,7 @@ another name against a copy of your notes.
 1. **`tv` is the stable release**, installed like any tester's:
 
    ```sh
-   uv tool install --force git+https://github.com/Johanmkr/tavla@v0.2.0
+   uv tool install --force git+https://github.com/Johanmkr/tavla@v0.3.0
    ```
 
    It uses your real content repo, and `tv update` moves it to new releases.
@@ -116,7 +116,7 @@ another name against a copy of your notes.
    open them until the next release. (`tv demo` is the other safe place to
    try things.)
 
-`tvdev --version` shows a development version (`0.2.1.dev3+g…`), so you can
+`tvdev --version` shows a development version (`0.3.1.dev3+g…`), so you can
 always tell them apart.
 
 ## Documentation

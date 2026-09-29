@@ -11,6 +11,13 @@ Update with `tavla update` (`--check` to see what's new first).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-29
+
+The alpha-testing release. `tavla flow` draws how your work depends on
+itself, `tavla demo` gives you a safe playground to try everything, and the
+docs were reworked for new users. No content layout change: nothing to
+migrate.
+
 ### Features
 - `tavla flow PROJECT|GOAL`: a dependency board. It shows a project's goals,
   or a goal's tasks, in stages of work that can run in parallel, with arrows
