@@ -85,15 +85,27 @@ def edit(
     priority: Annotated[Priority | None, typer.Option("--priority", help="New priority.")] = None,
     due: Annotated[str | None, typer.Option("--due", help=f"{DATE_HELP} 'none' clears it.")] = None,
     tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
+    project_id: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Move to this project (its tasks come along).",
+            autocompletion=complete_project,
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the goal in $EDITOR.
 
-    Either way the result is validated and committed.
+    Either way the result is validated and committed. Changing `project:` moves
+    the goal and its tasks to that project.
     """
     content = state(ctx, content_dir=content_dir).content()
     goal = content.goal(goal_id)
     changes = item_changes(goal, status=status, priority=priority, due=due, tags=tags)
+    if project_id is not None:
+        changes["project"] = content.project(project_id).id
     if changes or title is not None:
         edited = ops.set_fields(content, goal, changes, title=title)
     else:

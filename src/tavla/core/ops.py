@@ -271,11 +271,12 @@ def _reload(item: Item) -> Item:
     return type(item).load(item.path, item.project)
 
 
-def _fresh(content: Content, item: Item) -> Item:
-    """The item as the store sees it now (with inherited fields etc.)."""
+def _fresh(content: Content, item: Item, path: Path | None = None) -> Item:
+    """The item as the store sees it now (with inherited fields etc.), read
+    from ``path`` if its file has moved."""
     content.refresh()
     items = content.goals() if isinstance(item, Goal) else content.tasks()
-    return next(i for i in items if i.path == item.path)
+    return next(i for i in items if i.path == (path or item.path))
 
 
 def _write_new(content: Content, path: Path, fields: dict[str, Any], body: str) -> None:
@@ -533,16 +534,55 @@ def _finish_item_change(
     propagation, ``updated`` bump, commit."""
     content.refresh()
     _check_unique(content, edited.id, item.path)
-    if isinstance(edited, Task) and _links_changed(item, edited):
+    target = _target_project(content, item, edited)
+    if target is not None:
+        edited.project = target.id
+    if isinstance(edited, Task) and (target is not None or _links_changed(item, edited)):
         _check_task_links(content, edited)
+    moves = _project_moves(content, item, target) if target is not None else []
     today = today or dates.local_today()
     if bump and edited.updated == item.updated and edited.updated != today:
         item.path.write_text(set_frontmatter_key(item.path.read_text(), "updated", today))
     paths = [item.path]
     if edited.id != item.id:
         paths += _rename_references(content, item, item.id, edited.id)
+    for src, dst in moves:
+        text = set_frontmatter_key(src.read_text(), "project", target.id)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text)
+        src.unlink()
+        paths += [src, dst]
+    if target is not None:
+        message += f" -> project {target.id}"
     git_sync.commit(content.root, message, paths)
-    return _fresh(content, item)
+    return _fresh(content, item, moves[0][1] if moves else None)
+
+
+def _target_project(content: Content, item: Item, edited: Item) -> Project | None:
+    """The project the edited file's ``project:`` field names, when that is not
+    the project whose directory the file is in (None when it is, or is unset)."""
+    wanted = edited.meta.get("project")
+    if wanted is None or str(wanted) == item.project:
+        return None
+    project = next((p for p in content.projects() if p.id == str(wanted)), None)
+    if project is None:
+        raise ValidationError(f"{item.path}: project: unknown project '{wanted}'")
+    return project
+
+
+def _project_moves(content: Content, item: Item, project: Project) -> list[tuple[Path, Path]]:
+    """(from, to) file moves that put ``item`` in ``project``, the item first.
+    A goal takes its tasks along, since a task lives in its goal's project."""
+    subdir = GOALS_DIR if isinstance(item, Goal) else TASKS_DIR
+    moves = [(item.path, project.path / subdir / item.path.name)]
+    if isinstance(item, Goal):
+        moves += [
+            (t.path, project.path / TASKS_DIR / t.path.name) for t in content.goal_tasks(item)
+        ]
+    for _, dst in moves:
+        if dst.exists():
+            raise ValidationError(f"can't move to project {project.id}: {dst} already exists")
+    return moves
 
 
 def finish_edit(

@@ -164,11 +164,21 @@ def edit(
         typer.Option("--after", help="Dependencies: a,b replaces, +a,-b adjusts, 'none' clears."),
     ] = None,
     tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
+    project_id: Annotated[
+        str | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Move to this project (with -g, or a loose task).",
+            autocompletion=complete_project,
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the task in $EDITOR.
 
-    Either way the result is validated and committed.
+    Either way the result is validated and committed. Changing `project:` moves
+    the task to that project; its goal, if any, must be there too.
     """
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
@@ -179,6 +189,8 @@ def edit(
         changes["goal"] = None if is_clear(goal_id) else content.goal(goal_id).id
     if after is not None:
         changes["depends_on"] = _after_change(content, task, after)
+    if project_id is not None:
+        changes["project"] = content.project(project_id).id
     if changes or title is not None:
         edited = ops.set_fields(content, task, changes, title=title)
     else:

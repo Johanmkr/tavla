@@ -47,6 +47,21 @@ When you save, tavla checks the file (valid fields, known goal, known
 dependencies, no cycles) and commits it. If something is wrong, it restores
 the previous version and tells you why.
 
+## Moving to another project
+
+A goal or task belongs to the project whose folder its file is in. To move
+one, use `--project`, or change the `project:` line while editing in
+`tv ... edit`. tavla then moves the file for you:
+
+```sh
+tv goal edit intro --project thesis   # its tasks move along
+tv task edit fix-plot -p thesis       # a loose task
+tv task edit outline -p thesis -g submit-paper  # a task under a goal there
+```
+
+A task under a goal must stay in its goal's project, so move the goal, or
+give the task a goal in the new project (or `-g none`) at the same time.
+
 ## List-valued options
 
 `--tags` and `--after` take either a replacement list or a set of changes:
