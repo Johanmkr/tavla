@@ -206,6 +206,14 @@ def complete_goal(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
         return []
 
 
+def complete_project_or_goal(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
+    try:
+        content = _content_for_completion(ctx)
+        return complete_ids(incomplete, [*content.projects(), *content.goals()])
+    except (TavlaError, OSError):
+        return []
+
+
 def complete_task(ctx: typer.Context, incomplete: str) -> list[tuple[str, str]]:
     try:
         return complete_ids(incomplete, _content_for_completion(ctx).tasks())

@@ -8,7 +8,7 @@ from typing import Annotated
 import typer
 
 from tavla import __version__, config
-from tavla.cli import add, capture, deliverable, goal, idea, overview, project, task
+from tavla.cli import add, capture, deliverable, flow, goal, idea, overview, project, task
 from tavla.cli.common import (
     HELP_SETTINGS,
     JsonOpt,
@@ -35,6 +35,15 @@ SETUP = "Setup and maintenance"
 
 app.command("next", rich_help_panel=DAILY)(overview.next_)
 app.command("status", rich_help_panel=DAILY)(overview.status)
+app.command(
+    "flow",
+    rich_help_panel=DAILY,
+    epilog=examples(
+        "tv flow project-a # goals of a project, in dependency order",
+        "tv flow write-intro # tasks of one goal, with their subtasks",
+        "tv flow project-a --open # only what's left",
+    ),
+)(flow.flow_)
 app.command("add", rich_help_panel=DAILY)(add.add)
 app.command("capture", rich_help_panel=DAILY)(capture.capture)
 app.command("log", rich_help_panel=DAILY)(capture.log)
