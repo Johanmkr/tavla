@@ -95,7 +95,37 @@ $ tv idea promote exp:1 -g exp
 Promoted to task try-mixed-precision-to-speed-up-training: ...
 ```
 
-## 6. Check the overall health
+## 6. See how the experiments fit together
+
+`next` shows what you can start; `flow` shows the whole chain:
+
+```console
+$ tv flow exp --width 100
+Goal: Experiments  (exp)  ▸ 1/4 tasks done
+
+STAGE 1                   STAGE 2                   STAGE 3                   GOAL
+╭─ try-mixed-precis─╮
+│ ● try mixed       │
+│ precision to      │
+│ speed up training │
+│ high              │
+╰───────────────────╯
+╭─ pipeline ────────╮     ╭─ run-baseline ────╮     ╭─ run-ablations ───╮     ╭─ exp ─────────────╮
+│ ✓ Set up training │ ──▶ │ ● Run baseline    │ ──▶ │ ○ Run ablations   │ ══▶ │ ● Experiments     │
+│ pipeline          │     │ high              │     │ high              │     │ high · 1/4        │
+│ high              │     ╰───────────────────╯     ╰───────────────────╯     ╰───────────────────╯
+╰───────────────────╯
+Ready now: ● run-baseline  ● try-mixed-precision-to-speed-up-training
+✓ done   ▶ doing   ● ready   ○ waiting   ✗ blocked   ? missing   ↗ elsewhere   ! date problem
+```
+
+- The pipeline is done, so the baseline is ready, and the ablations wait for
+  it. Each stage only depends on earlier ones.
+- The promoted idea has no dependencies, so it sits in stage 1: it can be done
+  in parallel with everything else.
+- `tv flow thesis` shows the same for the whole project, one card per goal.
+
+## 7. Check the overall health
 
 ```console
 $ tv status
@@ -131,7 +161,7 @@ Recent log
   2026-09-28  pipeline runs end to end on toy data
 ```
 
-## 7. Look at the history
+## 8. Look at the history
 
 Every step above is a commit in your content repo:
 
@@ -152,4 +182,4 @@ ca48ffc task: start pipeline
   `## Subtasks` checklist. Its progress will show in `next`.
 - When the chapter structure is clear, break the `write` goal into one task
   per chapter, chained with `--after` if order matters.
-- Run `tv status` once a week.
+- Run `tv status` once a week, and `tv flow thesis --open` when you plan.

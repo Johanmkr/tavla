@@ -30,6 +30,16 @@ Update with `tavla update` (`--check` to see what's new first).
   a different project than the folder it's in, which happens after editing
   the file by hand. `tavla check --fix` moves the file.
 
+### Documentation
+- Diagrams of how projects, goals, tasks and ideas relate, and of what a
+  command does to your content repo; a terminal recording of a first session.
+- A shorter README that points to the user guide, with the demo, install and
+  a first session.
+- New page with notes for alpha testers; the worked examples now use the demo
+  content and include `flow` boards.
+- Issue forms for bug reports and ideas; CONTRIBUTING reorganised for
+  first-time contributors.
+
 ## [0.2.0] - 2026-09-29
 
 The first tagged release, for testers.
