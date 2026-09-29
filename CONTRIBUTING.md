@@ -18,6 +18,45 @@
   a copy of the oldest layout for the migration tests; `tests/fixtures/basic`
   and `example-content/` are always at the current layout.
 
+## Working on tavla
+
+Use the stable release for your real work and run the code in your clone
+under a separate name, against a copy of your notes.
+
+1. **`tv` is the stable release**, installed like any tester's:
+
+   ```sh
+   uv tool install --force git+https://github.com/Johanmkr/tavla@v0.2.0
+   ```
+
+   It uses your real content repo, and `tv update` moves it to new releases.
+   (An editable install, `uv tool install --editable .`, would make `tv` run
+   whatever the clone has checked out, so don't use one for daily work.)
+
+2. **`tvdev` runs the clone**, whatever branch or uncommitted changes it has,
+   from any directory and without reinstalling. Put this in your shell rc:
+
+   ```sh
+   alias tvdev='TAVLA_CONTENT_DIR=~/tavla-sandbox uv run --project ~/Documents/tavla tv'
+   ```
+
+3. **`~/tavla-sandbox` is a clone of your real content repo**, so testing
+   happens on realistic data that `tvdev` can't touch the original of:
+
+   ```sh
+   git clone ~/.local/share/tavla ~/tavla-sandbox
+   # reset it after a messy test:
+   rm -rf ~/tavla-sandbox && git clone ~/.local/share/tavla ~/tavla-sandbox
+   ```
+
+   This matters most for layout changes: if a dev version's `tavla migrate`
+   ran on your real notes, the stable `tv` would refuse to open them until
+   the next release.
+
+`tvdev --version` shows a development version (`0.2.1.dev3+g…`), so you can
+always tell the two apart. Run the tests with `uv run pytest` in the clone.
+After you release, run `tv update` to use the release yourself.
+
 ## Documentation
 
 The user guide is a MkDocs site: Markdown in `docs/`, config in `mkdocs.yml`.
@@ -60,5 +99,5 @@ Testers install a release with
 `uv tool install git+https://github.com/Johanmkr/tavla@v0.3.0`, and
 `tavla update` moves them to the newest `vX.Y.Z` tag. Tags with a suffix
 (`v1.0.0rc1`) become GitHub pre-releases and are skipped by `tavla update`.
-Update the version in the install lines of `README.md` and
-`docs/getting-started.md` when you release.
+Update the version in the install lines of `README.md`,
+`docs/getting-started.md` and "Working on tavla" above when you release.
