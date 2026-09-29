@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work, crashes, or does something surprising.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing tavla! Please don't paste anything from your notes
+        that you'd rather keep private; a made-up example is fine.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you ran, what you expected, and what you got instead.
+      placeholder: |
+        I ran `tv task done draft` and expected ..., but got ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: If you can, reproduce it in the demo (`tv demo`) so the steps work for anyone.
+      placeholder: |
+        1. tv demo --reset
+        2. export TAVLA_CONTENT_DIR=~/.cache/tavla/demo
+        3. tv ...
+  - type: textarea
+    id: output
+    attributes:
+      label: Error message or output
+      description: Copy the terminal output. It's formatted as code automatically.
+      render: text
+  - type: textarea
+    id: info
+    attributes:
+      label: Output of `tavla info`
+      description: Versions and paths (no content from your notes).
+      render: text
+    validations:
+      required: true

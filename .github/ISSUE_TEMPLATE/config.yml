@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: User guide
+    url: https://johanmkr.github.io/tavla/
+    about: Concepts, worked examples and the full command reference.
+  - name: FAQ
+    url: https://johanmkr.github.io/tavla/faq/
+    about: Common questions, including setup and syncing between machines.
