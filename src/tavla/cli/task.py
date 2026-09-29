@@ -27,6 +27,7 @@ from tavla.cli.common import (
     progress,
     state,
     table,
+    warn_misplaced,
 )
 from tavla.core import ops
 from tavla.core.dates import parse_date
@@ -408,6 +409,7 @@ def list_(
     elif not all_:
         tasks = [t for t in tasks if t.status != TaskStatus.DONE]
     tasks = sorted(tasks, key=_sort_key)
+    warn_misplaced(tasks)
 
     if st.json:
         emit_json(to_dict(tasks, content.root, exclude=("meta", "body")))
@@ -445,6 +447,7 @@ def show(
     st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
     task = content.task(task_id)
+    warn_misplaced([task])
 
     if st.json:
         emit_json(task, content.root)

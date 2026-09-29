@@ -16,6 +16,11 @@ Update with `tavla update` (`--check` to see what's new first).
   or a goal's tasks, in stages of work that can run in parallel, with arrows
   and `after:` notes for the dependencies. Use `--open` to show only what's
   left, and `--json` to get the board as data.
+- `tavla goal list -p PROJECT` now lists the goals of each subproject
+  under their own heading.
+- Goal and task lists (and `show`) warn when a file's `project:` line names
+  a different project than the folder it's in, which happens after editing
+  the file by hand. `tavla check --fix` moves the file.
 
 ## [0.2.0] - 2026-09-29
 

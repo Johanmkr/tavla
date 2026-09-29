@@ -119,6 +119,21 @@ def print_ideas(refs: Sequence[Any], heading: str | None = "Ideas") -> None:
         typer.echo(f"  {r.number:>2}. {r.idea.text}")
 
 
+def warn_misplaced(items: Sequence[Any]) -> None:
+    """Note goals/tasks whose ``project:`` line names another project than the
+    folder they are in (e.g. after editing the file by hand). Listings follow
+    the folder until ``tv check --fix`` moves the file."""
+    for item in items:
+        wanted = item.meta.get("project")
+        if wanted is not None and str(wanted) != item.project:
+            typer.secho(
+                f"note: {item.id} says project: {wanted}, but is filed under {item.project}."
+                " Run `tv check --fix` to move it.",
+                fg=typer.colors.YELLOW,
+                err=True,
+            )
+
+
 def progress(done: int, total: int) -> str:
     return f"{done}/{total}" if total else "-"
 

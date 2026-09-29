@@ -399,3 +399,16 @@ def test_deliverable_edit_in_editor(run, git_content, editor):
     result = run("deliverable", "edit", "neurips")
     assert result.exit_code == 0, result.output
     assert Content.open(git_content).deliverable("neurips").status == "submitted"
+
+
+def test_hand_edited_project_line_is_flagged_until_fixed(run, git_content):
+    path = git_content / "projects/project-a/goals/write-methods.md"
+    path.write_text(path.read_text().replace("project: project-a", "project: project-b"))
+    result = run("goal", "list")
+    assert "note: write-methods says project: project-b, but is filed under project-a" in (
+        result.output
+    )
+    assert run("check", "--fix").exit_code == 0
+    result = run("goal", "list")
+    assert "note:" not in result.output
+    assert "project-b  Write methods section" in result.output
