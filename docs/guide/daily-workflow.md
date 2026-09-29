@@ -121,16 +121,24 @@ to see its goals, or a goal to see its tasks:
 
 ```console
 $ tv flow write-methods
-Goal: Write methods section  (write-methods)  ▸ 0/1 tasks done
+Goal: Write methods section  (write-methods)  ▸ 0/2 tasks done
 
 STAGE 1                               STAGE 2                               GOAL
 ╭─ get-feedback-from-advisor ───╮     ╭─ describe-sampler ────────────╮     ╭─ write-methods ───────────────╮
-│ ○ ↗ Get feedback from advisor │ ──▶ │ ○ Describe sampler            │ ══▶ │ ○ Write methods section       │
-│ project-a                     │     │ med · due 2026-10-15 · 1/2    │     │ med · due 2026-10-15 · 0/1    │
+│ ○ ↗ Get feedback from advisor │ ──▶ │ ○ Describe sampler            │ ══▶ │ ▶ Write methods section       │
+│ project-a                     │     │ med · due 2026-10-15 · 1/2    │     │ med · due 2026-10-15 · 0/2    │
 ╰───────────────────────────────╯     │   ✓ Pseudocode                │     ╰───────────────────────────────╯
                                       │   ☐ Complexity                │
+                                      │ ! due before first            │
+                                      │ (2026-10-20)                  │
+                                      │ after: first                  │
                                       ╰───────────────────────────────╯
-✓ done   ● ready   ○ waiting on others   ✗ blocked   ? missing   ↗ outside this board
+╭─ first ───────────────────────╮
+│ ▶ First step                  │
+│ med · due 2026-10-20          │
+╰───────────────────────────────╯
+Ready now: ▶ first
+✓ done   ▶ doing   ● ready   ○ waiting   ✗ blocked   ? missing   ↗ elsewhere   ! date problem
 ```
 
 - Cards are grouped into **stages**. A card depends only on cards in earlier
@@ -142,15 +150,26 @@ STAGE 1                               STAGE 2                               GOAL
   that other goal. A task with no goal gets its own card.
 - A card marked `↗` is outside the board: a dependency in another goal or
   project, shown so you can see what the first stage is waiting on.
+- `!` lines point out dates that don't work: something overdue, or a task due
+  before one of its prerequisites is.
+- **Ready now** lists the tasks you can start, in the same order as `tv next`.
+
+When the terminal is wide, a stage with many cards spreads over several
+columns. When it's too narrow, the stages are printed one below the other.
+Set the width yourself with `--width N`.
+
+### Other views
 
 ```sh
-tv flow thesis --open        # hide finished goals, tasks and subtasks
-tv flow exp -n 0             # list every subtask (default: 6 lines per card)
-tv flow thesis --json        # the board as data
+tv flow thesis --by status     # kanban: todo / doing / blocked / done columns
+tv flow thesis --open          # hide finished goals, tasks and subtasks
+tv flow exp -n 0               # list every subtask (default: 6 lines per card)
+tv flow thesis -f mermaid      # a Mermaid flowchart, for notes or GitHub
+tv flow thesis --json          # the board as data
 ```
 
-If the stages don't fit in the terminal, they are printed one below the
-other. Set the width yourself with `--width N`.
+`--format mermaid` prints text that GitHub, Obsidian, MkDocs and many other
+tools draw as a diagram. Paste it inside a ```` ```mermaid ```` block.
 
 ## A suggested rhythm
 
