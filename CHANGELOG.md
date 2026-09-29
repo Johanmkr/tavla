@@ -11,6 +11,12 @@ Update with `tavla update` (`--check` to see what's new first).
 
 ## [Unreleased]
 
+### Features
+- `tavla flow PROJECT|GOAL`: a dependency board. It shows a project's goals,
+  or a goal's tasks, in stages of work that can run in parallel, with arrows
+  and `after:` notes for the dependencies. Use `--open` to show only what's
+  left, and `--json` to get the board as data.
+
 ## [0.2.0] - 2026-09-29
 
 The first tagged release, for testers.

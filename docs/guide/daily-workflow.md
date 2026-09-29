@@ -114,6 +114,44 @@ you can close them.
 
 Change the time windows with `--stale-days N` and `--deadline-days N`.
 
+## `flow`
+
+`tv flow` draws a board of how work depends on other work. Give it a project
+to see its goals, or a goal to see its tasks:
+
+```console
+$ tv flow write-methods
+Goal: Write methods section  (write-methods)  ▸ 0/1 tasks done
+
+STAGE 1                               STAGE 2                               GOAL
+╭─ get-feedback-from-advisor ───╮     ╭─ describe-sampler ────────────╮     ╭─ write-methods ───────────────╮
+│ ○ ↗ Get feedback from advisor │ ──▶ │ ○ Describe sampler            │ ══▶ │ ○ Write methods section       │
+│ project-a                     │     │ med · due 2026-10-15 · 1/2    │     │ med · due 2026-10-15 · 0/1    │
+╰───────────────────────────────╯     │   ✓ Pseudocode                │     ╰───────────────────────────────╯
+                                      │   ☐ Complexity                │
+                                      ╰───────────────────────────────╯
+✓ done   ● ready   ○ waiting on others   ✗ blocked   ? missing   ↗ outside this board
+```
+
+- Cards are grouped into **stages**. A card depends only on cards in earlier
+  stages, so the cards in one stage can be done in parallel.
+- An arrow means "this unblocks that". If a dependency can't be drawn as an
+  arrow, the card lists it as `after: ...`.
+- On a project board each goal is one card, with its tasks listed in order.
+  A goal comes after another goal when one of its tasks depends on a task in
+  that other goal. A task with no goal gets its own card.
+- A card marked `↗` is outside the board: a dependency in another goal or
+  project, shown so you can see what the first stage is waiting on.
+
+```sh
+tv flow thesis --open        # hide finished goals, tasks and subtasks
+tv flow exp -n 0             # list every subtask (default: 6 lines per card)
+tv flow thesis --json        # the board as data
+```
+
+If the stages don't fit in the terminal, they are printed one below the
+other. Set the width yourself with `--width N`.
+
 ## A suggested rhythm
 
 === "Daily"
@@ -130,6 +168,7 @@ Change the time windows with `--stale-days N` and `--deadline-days N`.
 
     ```sh
     tv status               # stale projects, due soon, waiting
+    tv flow PROJECT         # what depends on what, and what can run in parallel
     tv idea list            # triage the inbox: move, promote or drop
     tv goal list            # any goals ready to close or re-plan?
     ```
