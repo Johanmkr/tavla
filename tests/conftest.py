@@ -8,6 +8,7 @@ import sys
 from pathlib import Path
 
 import pytest
+import typer.rich_utils
 
 
 @pytest.fixture(autouse=True)
@@ -26,6 +27,9 @@ def isolated_env(tmp_path, monkeypatch):
     for var in ("AUTHOR", "COMMITTER"):
         monkeypatch.setenv(f"GIT_{var}_NAME", "tavla-test")
         monkeypatch.setenv(f"GIT_{var}_EMAIL", "test@example.invalid")
+    # Plain help output everywhere: Typer forces colour codes when it sees
+    # GITHUB_ACTIONS (read once at import, so the env var alone can't undo it).
+    monkeypatch.setattr(typer.rich_utils, "FORCE_TERMINAL", False)
     return home
 
 
