@@ -476,6 +476,27 @@ def test_set_fields_unknown_project_restores(content, git):
     assert _is_clean(git, content.root)
 
 
+def test_stale_project_line_does_not_block_other_edits(content, git):
+    goal = content.goal("write-intro")
+    goal.path.write_text(goal.path.read_text().replace("project: project-a", "project: old-name"))
+    git(content.root, "commit", "-qam", "stale")
+    content.refresh()
+    edited = ops.set_fields(
+        content, content.goal("write-intro"), {"status": "blocked"}, today=TODAY
+    )
+    assert edited.project == "project-a"
+    assert edited.status == "blocked"
+
+
+def test_project_rename_updates_project_lines(content, git):
+    project = content.project("project-a")
+    ops.set_project_fields(content, project, {"id": "alpha"})
+    content.refresh()
+    assert "project: alpha" in content.goal("write-intro").path.read_text()
+    assert "project: alpha" in content.task("fix-plot").path.read_text()
+    assert _is_clean(git, content.root)
+
+
 # --- subtasks & updates --------------------------------------------------------
 
 

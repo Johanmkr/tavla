@@ -108,7 +108,11 @@ else is free text that tavla never rewrites.
 !!! warning "Commit hand edits yourself"
     tavla only auto-commits its own changes. If you edit a file outside
     `tavla ... edit`, commit it in the content repo afterwards. To have tavla
-    validate your change, open the file with `tavla ... edit` instead.
+    validate your change, open the file with `tavla ... edit` instead, or run
+    `tavla check` afterwards. It reports files that don't load, duplicate ids,
+    unknown goals or dependencies, cycles, and `project:` lines that disagree
+    with the file's folder. `tavla check --fix` moves those files to the
+    project the line names, or resets a line that names no known project.
 
 See [File formats](../reference/file-formats.md) for exactly what each file
 contains.

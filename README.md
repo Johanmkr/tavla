@@ -103,6 +103,7 @@ id prefixes and shows each title next to its id.
 | `tavla init [--content-dir PATH]` | Create the content repo and default config |
 | `tavla migrate [--dry-run]` | Upgrade an older content repo to the current layout (one commit) |
 | `tavla update [--check]` | Update tavla itself to the latest `main` (fast-forward only) |
+| `tavla check [--fix]` | Find problems in hand-edited files (unloadable files, duplicate ids, broken links, `project:` lines that disagree with the folder); `--fix` moves those files, or resets a line naming no known project |
 | `tavla capture TEXT…` | Add an idea to the inbox (quotes optional) |
 | `tavla log PROJECT TEXT…` | Append a timestamped line to the project's `log.md` |
 | `tavla undo [-n]` | Undo the last change as a new commit (`-n`: only show it); run again to go further back |
@@ -117,7 +118,7 @@ id prefixes and shows each title next to its id.
 | `tavla goal add TITLE -p PROJECT [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a goal |
 | `tavla goal list [-p PROJECT] [--status S] [--all]` | List goals with task progress (done hidden unless `--all`) |
 | `tavla goal show ID` | Metadata, its tasks, and the goal file |
-| `tavla goal edit ID [--title T] [--status S] [--priority P] [--due DATE\|none] [--tags …]` | Change the given fields; with no options, edit the goal file in `$EDITOR` |
+| `tavla goal edit ID [--title T] [--status S] [--priority P] [--due DATE\|none] [--tags …] [-p PROJECT]` | Change the given fields (`-p` moves it and its tasks); with no options, edit the goal file in `$EDITOR` |
 | `tavla goal start ID` / `goal done ID` | Mark a goal `doing` / `done` |
 | `tavla goal note ID TEXT…` | Add a timestamped line to the goal's `## Updates` |
 | `tavla goal drop ID [-y]` | Delete a goal (asks first). Refused while tasks still belong to it |
@@ -126,7 +127,7 @@ id prefixes and shows each title next to its id.
 | `tavla task add TITLE (-g GOAL \| -p PROJECT) [--after IDS] [--priority P] [--due DATE] [--tags a,b] [--id ID]` | Create a task under a goal, or directly in a project |
 | `tavla task list [-p PROJECT] [-g GOAL] [--status S] [--all]` | List tasks (done hidden unless `--all`; `*` = waiting on dependencies) |
 | `tavla task show ID` | Metadata (incl. dependencies and inherited fields) plus the task file |
-| `tavla task edit ID [--title T] [--status S] [--priority P\|none] [--due DATE\|none] [-g GOAL\|none] [--after …] [--tags …]` | Change the given fields; with no options, edit the task file in `$EDITOR` |
+| `tavla task edit ID [--title T] [--status S] [--priority P\|none] [--due DATE\|none] [-g GOAL\|none] [--after …] [--tags …] [-p PROJECT]` | Change the given fields (`-p` moves it); with no options, edit the task file in `$EDITOR` |
 | `tavla task start ID` / `task done ID` | Mark a task `doing` / `done` (`done` reports tasks it unblocks) |
 | `tavla task check ID [N\|TEXT…]` / `task uncheck ID N\|TEXT…` | Tick / untick subtasks by number or text; with none, `check` lists them numbered |
 | `tavla task subtask ID TEXT…` | Add an unchecked subtask |
@@ -253,8 +254,10 @@ commit for you, and restore it if you save something invalid. Renaming an id
 via `edit` updates the tasks that point at it.
 
 A goal's or task's project is the folder it lives in — you can move the file to
-another project's `goals/` or `tasks/` folder and it follows. Links between
-things use ids, never paths.
+another project's `goals/` or `tasks/` folder and it follows. Changing only the
+`project:` line doesn't move it; `tavla check` finds those files and
+`tavla check --fix` moves them (a goal's tasks go along). Links between things
+use ids, never paths.
 
 ### Upgrading from an older layout
 
