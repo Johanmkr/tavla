@@ -84,6 +84,22 @@ def test_goal_list(run):
     assert "setup-env" in run("goal", "list", "--all").output
 
 
+def test_goal_list_groups_subprojects(run):
+    out = run("goal", "list", "-p", "project-a").output
+    parent, sub = out.split("\n\n")
+    assert parent.startswith("project-a — Adaptive sampling for X")
+    assert "write-intro" in parent and "run-ablations" not in parent
+    assert sub.startswith("project-a / ablations — ")
+    assert "run-ablations" in sub
+    assert "PROJECT" not in out
+
+
+def test_goal_list_project_without_subprojects(run):
+    out = run("goal", "list", "-p", "project-b").output
+    assert out.splitlines()[0].split()[:2] == ["ID", "STATUS"]
+    assert "write-review" in out
+
+
 def test_goal_show(run):
     result = run("goal", "show", "write-i")
     assert result.exit_code == 0, result.output

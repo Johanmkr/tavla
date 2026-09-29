@@ -25,6 +25,7 @@ from tavla.cli.common import (
     progress,
     state,
     table,
+    warn_misplaced,
 )
 from tavla.core import ops
 from tavla.core.dates import parse_date
@@ -217,7 +218,7 @@ def list_(
         typer.Option(
             "--project",
             "-p",
-            help="Only this project (and its subprojects).",
+            help="Only this project; its subprojects' goals are listed under their own headings.",
             autocompletion=complete_project,
         ),
     ] = None,
@@ -238,6 +239,7 @@ def list_(
     elif not all_:
         goals = [g for g in goals if g.status != GoalStatus.DONE]
     goals = sorted(goals, key=_sort_key)
+    warn_misplaced(goals)
 
     if st.json:
         emit_json(to_dict(goals, content.root, exclude=("meta", "body")))
@@ -245,21 +247,45 @@ def list_(
     if not goals:
         typer.echo("No goals.")
         return
-    table(
+    subprojects = content.descendants(project) if project else []
+    if not subprojects:
+        _goal_table(goals, with_project=True)
+        return
+    # A project with subprojects: one table per (sub)project, parent first.
+    assert project is not None
+    paths = {project.id: project.id}
+    for p in subprojects:
+        paths[p.id] = f"{paths[p.parent]} / {p.id}" if p.parent in paths else p.id
+    first = True
+    for p in [project, *subprojects]:
+        group = [g for g in goals if g.project == p.id]
+        if not group:
+            continue
+        if not first:
+            typer.echo("")
+        first = False
+        typer.secho(f"{paths[p.id]} — {p.title}", bold=True)
+        _goal_table(group, with_project=False)
+
+
+def _goal_table(goals: list[Goal], *, with_project: bool) -> None:
+    headers = ["ID", "STATUS", "PRIORITY", "DUE", "TASKS", "PROJECT", "TITLE"]
+    rows = [
         [
-            [
-                g.id,
-                g.status,
-                g.priority,
-                fmt_date(g.due),
-                progress(g.tasks_done, g.tasks_total),
-                g.project,
-                g.title,
-            ]
-            for g in goals
-        ],
-        ["ID", "STATUS", "PRIORITY", "DUE", "TASKS", "PROJECT", "TITLE"],
-    )
+            g.id,
+            g.status,
+            g.priority,
+            fmt_date(g.due),
+            progress(g.tasks_done, g.tasks_total),
+            g.project,
+            g.title,
+        ]
+        for g in goals
+    ]
+    if not with_project:
+        headers.remove("PROJECT")
+        rows = [[*r[:5], r[6]] for r in rows]
+    table(rows, headers)
 
 
 @app.command()
@@ -275,6 +301,7 @@ def show(
     content = st.content()
     goal = content.goal(goal_id)
     tasks = content.goal_tasks(goal)
+    warn_misplaced([goal])
 
     if st.json:
         data = to_dict(goal, content.root)
