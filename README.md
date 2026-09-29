@@ -63,7 +63,7 @@ You need [uv](https://docs.astral.sh/uv/getting-started/installation/) and
 `git`; uv fetches a suitable Python by itself. Then:
 
 ```sh
-uv tool install git+https://github.com/Johanmkr/tavla@v0.2.0   # puts `tavla` and `tv` on your PATH
+uv tool install git+https://github.com/Johanmkr/tavla@v0.3.0   # puts `tavla` and `tv` on your PATH
 tv --install-completion                                        # optional: tab-completion
 ```
 

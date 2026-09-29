@@ -8,7 +8,7 @@ one. Install the latest release (see the
 [releases page](https://github.com/Johanmkr/tavla/releases) for its number):
 
 ```sh
-uv tool install git+https://github.com/Johanmkr/tavla@v0.2.0   # puts `tavla` and `tv` on your PATH
+uv tool install git+https://github.com/Johanmkr/tavla@v0.3.0   # puts `tavla` and `tv` on your PATH
 tv --version
 ```
 
@@ -31,12 +31,12 @@ Restart your shell afterwards.
 
 ```console
 $ tv update --check        # see what's new, change nothing
-tavla v0.3.0 is available (you have 0.2.0).
-What's new: https://github.com/Johanmkr/tavla/releases/tag/v0.3.0
+tavla v0.4.0 is available (you have 0.3.0).
+What's new: https://github.com/Johanmkr/tavla/releases/tag/v0.4.0
 Run `tavla update` to install it.
 $ tv update
-Installing v0.3.0 with uv...
-Updated tavla 0.2.0 -> 0.3.0.
+Installing v0.4.0 with uv...
+Updated tavla 0.3.0 -> 0.4.0.
 ```
 
 `update` finds the newest release and reinstalls it with
