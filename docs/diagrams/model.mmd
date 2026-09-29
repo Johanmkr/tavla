@@ -1,0 +1,27 @@
+flowchart LR
+  project["<b>Project</b><br/>project.yaml<br/><i>status · priority · tags</i>"]
+  sub["<b>Subproject</b><br/>same shape, nested inside"]
+  goal["<b>Goal</b><br/>goals/ID.md<br/><i>an outcome, often with a due date</i>"]
+  loose["<b>Task without a goal</b><br/>tasks/ID.md"]
+  extras["<b>Log · Ideas · Deliverables</b><br/>log.md · ideas.md · deliverables/"]
+  task["<b>Task</b><br/>tasks/ID.md<br/><i>goal: GOAL</i>"]
+  later["<b>Task</b><br/>tasks/ID.md<br/><i>goal: GOAL</i><br/><i>depends_on: [TASK]</i>"]
+  subtasks["<b>Subtasks</b><br/>a checklist inside<br/>the task file"]
+  idea(["<b>Idea</b>: one line with #tags<br/>in the inbox, a project,<br/>a goal or a task"])
+
+  project --> sub
+  project --> goal
+  project --> loose
+  project --> extras
+  goal -- "priority and due<br/>are inherited" --> task
+  goal --> later
+  task -. "unblocks" .-> later
+  task --> subtasks
+  idea -. "tv idea promote" .-> loose
+
+  classDef container stroke:#00897b,stroke-width:2px
+  classDef work stroke:#43a047,stroke-width:2px
+  classDef side stroke:#9e9e9e,stroke-dasharray:4
+  class project,sub,goal container
+  class task,later,loose,subtasks work
+  class extras,idea side

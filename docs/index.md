@@ -4,6 +4,8 @@
 several projects. It keeps track of goals, tasks, loose ideas and progress
 logs, and answers one question across all of them: *what should I work on next?*
 
+![tv next, then tv task done, then tv flow, on the demo content](assets/demo.gif)
+
 <div class="grid cards" markdown>
 
 - **Plain text.** Everything is Markdown or YAML that you can read, grep and
@@ -34,10 +36,20 @@ Now unblocked: run-baseline
 
 `tv` is a short alias for `tavla`. Both work everywhere.
 
+## How it fits together
+
+```mermaid
+--8<-- "model.mmd"
+```
+
+Projects hold goals, goals are reached through tasks, and tasks can wait for
+each other. [Organising work](guide/organising-work.md) explains each part.
+
 ## Where to go from here
 
 - **New to tavla?** Start with [Getting started](getting-started.md).
 - **Want to see it used on something real?** See the worked
   [master's thesis example](examples/master-thesis.md).
 - **Looking for a specific flag?** Go to the [command reference](reference/cli.md).
+- **Testing tavla for someone?** Read the [notes for alpha testers](alpha.md).
 - **Stuck on something?** Check the [FAQ](faq.md).

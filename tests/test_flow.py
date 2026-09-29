@@ -276,6 +276,15 @@ def test_cli_project_board_arrow_between_goals(run):
     assert "after:" not in result.output
 
 
+def test_cli_goal_sits_beside_the_last_stage(run, content):
+    # A task with no dependencies in stage 1 takes row 0; the last stage's
+    # card is further down, and the goal must sit beside it.
+    write_task(content.root, "aaa-first", goal="write-intro", status="doing")
+    lines = run("write-intro", "--width", "120").output.splitlines()
+    goal_line = next(line for line in lines if "══▶" in line)
+    assert "Get feedback" in goal_line
+
+
 def test_cli_narrow_stacks_stages(run):
     result = run("write-intro", "--width", "40")
     assert result.exit_code == 0, result.output

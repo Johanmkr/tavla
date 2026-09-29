@@ -1,5 +1,15 @@
 # Your content repo
 
+## What happens when you run a command
+
+```mermaid
+--8<-- "machinery.mmd"
+```
+
+tavla reads and writes plain files, and commits every change it makes, so the
+git history is the record of your work. You can edit the files yourself too;
+`tv check` tells you if something no longer fits together.
+
 ## Layout
 
 ```

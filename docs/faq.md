@@ -28,6 +28,12 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
 ??? question "Is there a difference between `tavla` and `tv`?"
     No. `tv` is just a shorter name for the same program.
 
+??? question "How do I report a bug or suggest something?"
+    [Open an issue](https://github.com/Johanmkr/tavla/issues/new/choose) and
+    pick a form. For a bug, include the output of `tv info`: it shows the
+    versions and paths involved, but nothing from your notes. If you can,
+    reproduce the problem in `tv demo` so the steps work for anyone.
+
 ## Everyday use
 
 <a id="my-tag-disappeared"></a>
@@ -51,6 +57,11 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     - It's past the top 10. Use `tv next -n 0` to see everything.
     - You filtered with `--priority` or `-p`.
 
+??? question "How do I see what depends on what?"
+    `tv flow PROJECT` (or `tv flow GOAL`) draws a board: work that can happen
+    in parallel shares a stage, and arrows show what unblocks what. See
+    [`flow`](guide/daily-workflow.md#flow).
+
 ??? question "Should this be a goal, a task or a subtask?"
     A **task** is something you'd want to see on its own in `next`. A
     **subtask** only makes sense while you're working on its task. A
@@ -71,10 +82,12 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     new commit, so nothing is lost); run it again to go further back, or
     `tavla undo -n` to see what it would undo first.
 
-??? question "How do I move a task to another project?"
-    Move its file into the other project's `tasks/` folder and commit.
-    Remove its `goal:` first if that goal belongs to the old project. Links
-    use ids, not paths, so nothing else needs to change.
+??? question "How do I move a task or goal to another project?"
+    `tv task edit ID -p PROJECT` moves a task; a task under a goal also needs
+    a goal in the new project (`-g GOAL`) or `-g none`. `tv goal edit ID -p
+    PROJECT` moves a goal together with its tasks. Links use ids, not paths,
+    so nothing else needs to change. See
+    [Moving to another project](guide/editing.md#moving-to-another-project).
 
 ??? question "How do I make a subproject, or move a project under another?"
     Use `tv project add NAME -p PARENT` to create one, and
@@ -99,8 +112,8 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     cycles.
 
     One exception: changing the `project:` line in a file you opened yourself
-    does not move it, because the file's folder decides its project.
-    `tv check` lists such files and `tv check --fix` moves them. Or use
+    does not move it, because the file's folder decides its project. Goal and
+    task lists warn about such files, and `tv check --fix` moves them. Or use
     `tv goal edit ID --project P` in the first place.
 
 ??? question "What happens if I save an invalid file in `tv ... edit`?"
@@ -116,15 +129,15 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
 
 ??? question "How do I update tavla?"
     Run `tv update`, or `tv update --check` to see what's new first. It
-    fast-forwards the clone you installed from to `origin/main`. See
+    reinstalls the newest release with uv. See
     [Updating tavla](getting-started.md#updating-tavla).
 
-??? question "`tv update` says it can't update itself."
-    `update` only works when tavla runs from a git clone (the
-    `uv tool install --editable .` install in the README). If you installed
-    it some other way, reinstall from a clone. If it refuses because of
-    uncommitted changes, another branch or diverged commits, sort that out
-    in the clone with git first.
+??? question "`tv update` didn't work."
+    If uv isn't on your PATH or the install fails, nothing is changed and
+    tavla prints the command to run by hand. If you installed from a git
+    clone (`uv tool install --editable .`), `update` fast-forwards the clone
+    instead, and refuses while it has uncommitted changes, another branch
+    checked out or diverged commits; sort that out with git first.
 
 ??? question "tavla says my content uses an older layout."
     Run `tavla migrate --dry-run` to see the plan, then `tavla migrate`. It's

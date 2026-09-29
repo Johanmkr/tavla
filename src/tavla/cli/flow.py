@@ -261,6 +261,8 @@ def render(board: Board, width: int, max_items: int) -> RenderableType:
     grid.add_row(*head_cells)
 
     n_rows = max((max(c) + 1 for c in placed if c), default=0)
+    # The goal sits beside the first card of the last stage, which feeds it.
+    goal_row = min(placed[-1]) if placed and placed[-1] else 0
     for r in range(max(n_rows, 1 if board.goal else 0)):
         cells: list[RenderableType] = []
         for i, col in enumerate(placed):
@@ -271,8 +273,9 @@ def render(board: Board, width: int, max_items: int) -> RenderableType:
             card = col.get(r)
             cells.append(render_card(card, card_w, drawn, max_items) if card else "")
         if board.goal:
-            if r == 0:
-                cells += [Text(f"\n{INTO_GOAL}"), render_card(board.goal, card_w, drawn, 0)]
+            if r == goal_row:
+                arrow = Text(f"\n{INTO_GOAL}") if placed and r in placed[-1] else ""
+                cells += [arrow, render_card(board.goal, card_w, drawn, 0)]
             else:
                 cells += ["", ""]
         grid.add_row(*cells)

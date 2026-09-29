@@ -2,8 +2,9 @@
 
 ## Install
 
-tavla needs Python 3.11+, `git` and [uv](https://docs.astral.sh/uv/getting-started/installation/).
-Install the latest release (see the
+tavla needs [uv](https://docs.astral.sh/uv/getting-started/installation/) and
+`git`. uv fetches a suitable Python (3.11 or newer) by itself if you don't have
+one. Install the latest release (see the
 [releases page](https://github.com/Johanmkr/tavla/releases) for its number):
 
 ```sh
@@ -126,11 +127,11 @@ field, with optional ones at their defaults:
 
 ```console
 $ tv add goal
-? Project project-b  Literature review on MCMC diagnostics
+? Project adaptive-sampling  Adaptive sampling
 ? Title  (< back) Try it out
 
   New goal
-    project   project-b
+    project   adaptive-sampling
     title     Try it out
     id        try-it-out  (from the title)
     priority  med
@@ -138,7 +139,7 @@ $ tv add goal
     tags      –
 
 ? What next? Create it
-Added goal try-it-out to project-b
+Added goal try-it-out to adaptive-sampling
 ? Add another goal? No
 ```
 
@@ -165,6 +166,7 @@ tv log adap "outline agreed with supervisor"
 tv task done outline             # -> Now unblocked: draft-related-work
 tv capture "look into parallel tempering #mcmc"   # quick thought -> inbox
 tv status                        # what's stale, waiting, or due soon
+tv flow adap                     # how the goals and tasks depend on each other
 ```
 
 Every one of these commands makes a git commit in your content repo, so you
@@ -174,6 +176,7 @@ never need to "save".
 
 - [Organising work](guide/organising-work.md) covers projects, goals, tasks,
   subtasks and dependencies.
-- [Daily workflow](guide/daily-workflow.md) explains how `next` and `status`
-  decide what to show you.
+- [Daily workflow](guide/daily-workflow.md) explains how `next`, `status` and
+  `flow` decide what to show you.
 - [A master's thesis](examples/master-thesis.md) is a complete worked example.
+- Testing tavla for someone? Read the [notes for alpha testers](alpha.md).

@@ -2,9 +2,10 @@
 
 ## JSON output
 
-Read commands accept `--json`: `next`, `status`, `project/goal/task list`,
-`project/goal/task show` and `idea list`. The flag works before or after the
-command.
+Read commands accept `--json`: `next`, `status`, `flow`, `info`,
+`project/goal/task list`, `project/goal/task show` and `idea list`. The flag
+works before or after the command. (`tv flow X --format mermaid` prints a
+Mermaid diagram instead.)
 
 ```console
 $ tv next --json -n 1

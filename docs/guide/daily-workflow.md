@@ -117,27 +117,32 @@ Change the time windows with `--stale-days N` and `--deadline-days N`.
 ## `flow`
 
 `tv flow` draws a board of how work depends on other work. Give it a project
-to see its goals, or a goal to see its tasks:
+to see its goals, or a goal to see its tasks. Here is the write-up goal from
+the [demo](../examples/several-projects.md):
 
 ```console
-$ tv flow write-methods
-Goal: Write methods section  (write-methods)  ▸ 0/2 tasks done
+$ tv flow write-up --width 110
+Goal: Write the thesis draft  (write-up)  ▸ 0/3 tasks done
 
-STAGE 1                               STAGE 2                               GOAL
-╭─ get-feedback-from-advisor ───╮     ╭─ describe-sampler ────────────╮     ╭─ write-methods ───────────────╮
-│ ○ ↗ Get feedback from advisor │ ──▶ │ ○ Describe sampler            │ ══▶ │ ▶ Write methods section       │
-│ project-a                     │     │ med · due 2026-10-15 · 1/2    │     │ med · due 2026-10-15 · 0/2    │
-╰───────────────────────────────╯     │   ✓ Pseudocode                │     ╰───────────────────────────────╯
-                                      │   ☐ Complexity                │
-                                      │ ! due before first            │
-                                      │ (2026-10-20)                  │
-                                      │ after: first                  │
-                                      ╰───────────────────────────────╯
-╭─ first ───────────────────────╮
-│ ▶ First step                  │
-│ med · due 2026-10-20          │
-╰───────────────────────────────╯
-Ready now: ▶ first
+STAGE 1                     STAGE 2                     STAGE 3                     GOAL
+╭─ make-figures ──────╮     ╭─ draft-results ─────╮     ╭─ send-draft ────────╮     ╭─ write-up ──────────╮
+│ ○ ↗ Make the result │ ──▶ │ ○ Draft the results │ ──▶ │ ○ Send the full     │ ══▶ │ ● Write the thesis  │
+│ figures             │     │ chapter             │     │ draft to the        │     │ draft               │
+│ thesis              │     │ high · due          │     │ supervisor          │     │ high · due          │
+╰─────────────────────╯     │ 2026-10-15          │     │ high · due          │     │ 2026-11-30 · 0/3    │
+                            │ ! due before        │     │ 2026-11-30          │     ╰─────────────────────╯
+                            │ make-figures        │     │ after: draft-metho… │
+                            │ (2026-10-20)        │     ╰─────────────────────╯
+                            ╰─────────────────────╯
+╭─ set-up-pipeline ───╮     ╭─ draft-methods ─────╮
+│ ✓ ↗ Set up the      │ ──▶ │ ● Draft the methods │
+│ experiment pipeline │     │ chapter             │
+│ thesis              │     │ high · due          │
+╰─────────────────────╯     │ 2026-11-30 · 0/2    │
+                            │   ☐ Describe the m… │
+                            │   ☐ Describe the a… │
+                            ╰─────────────────────╯
+Ready now: ● draft-methods
 ✓ done   ▶ doing   ● ready   ○ waiting   ✗ blocked   ? missing   ↗ elsewhere   ! date problem
 ```
 
@@ -149,9 +154,11 @@ Ready now: ▶ first
   A goal comes after another goal when one of its tasks depends on a task in
   that other goal. A task with no goal gets its own card.
 - A card marked `↗` is outside the board: a dependency in another goal or
-  project, shown so you can see what the first stage is waiting on.
+  project (here the experiments goal), shown so you can see what the first
+  stage is waiting on.
 - `!` lines point out dates that don't work: something overdue, or a task due
-  before one of its prerequisites is.
+  before one of its prerequisites is (the results chapter above is due before
+  the figures it needs).
 - **Ready now** lists the tasks you can start, in the same order as `tv next`.
 
 When the terminal is wide, a stage with many cards spreads over several

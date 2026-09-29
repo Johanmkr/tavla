@@ -2,12 +2,12 @@
 
 ## The hierarchy
 
+```mermaid
+--8<-- "model.mmd"
 ```
-Project            e.g. "Adaptive sampling"          project.yaml
-└── Goal           an outcome: "Write introduction"   goals/<id>.md
-    └── Task       a unit of work, with instructions  tasks/<id>.md
-        └── subtasks   a checklist inside the task file
-```
+
+Each box is a file (or a part of one) in your content repo; see
+[Your content repo](content-repo.md) for the full layout.
 
 Project
 :   A body of work with its own status (`active`, `paused`, `done`,
@@ -90,7 +90,9 @@ tv task edit run-ablations --after -collect-key-papers   # remove one
 tv task edit run-baseline  --after none                  # clear all
 ```
 
-tavla refuses unknown ids, self-dependencies and cycles.
+tavla refuses unknown ids, self-dependencies and cycles. To see the whole
+picture, `tv flow GOAL` draws the tasks as a board of stages (see
+[`flow`](daily-workflow.md#flow)).
 
 !!! note "Waiting vs. blocked"
     *Waiting* is computed from dependencies. *Blocked* is a status you set by
@@ -103,9 +105,9 @@ tavla refuses unknown ids, self-dependencies and cycles.
   and keeps its fields and notes. Add `-g OTHER` to put it under another goal
   in the same project. This is refused while the goal still has tasks.
 - **An idea turned out to be real work:** see [promoting ideas](ideas.md#promoting).
-- **A task belongs in another project:** move its file into the other
-  project's `tasks/` folder. A task's project is simply the folder it lives
-  in. Commit the move yourself.
+- **A task or goal belongs in another project:** `tv task edit ID -p PROJECT`
+  or `tv goal edit ID -p PROJECT` (a goal's tasks come along). See
+  [Moving to another project](editing.md#moving-to-another-project).
 
 ## Subprojects
 
@@ -128,8 +130,9 @@ How subprojects behave:
 
 - **Everything else works on them as normal.** Goals, tasks, ideas, logs and
   ids work exactly as they do in any other project.
-- **`-p` includes them.** `next -p`, `goal list -p` and `task list -p` on a
-  parent include its subprojects.
+- **`-p` includes them.** `next -p`, `goal list -p`, `task list -p` and
+  `flow` on a parent include its subprojects; `goal list -p` shows each
+  subproject's goals under its own heading.
 - **They follow their parent's pause.** A subproject of a paused project
   counts as paused.
 - **Activity counts for the parent.** A parent isn't flagged as stale while
