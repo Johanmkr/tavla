@@ -16,7 +16,8 @@
   `tavla.core.bootstrap` and adding a step to `tavla.core.migrate`, so existing
   content repos can be upgraded with `tavla migrate`. `tests/fixtures/v1` keeps
   a copy of the oldest layout for the migration tests; `tests/fixtures/basic`
-  and `example-content/` are always at the current layout.
+  and `src/tavla/demo_content/` (what `tavla demo` copies) are always at the
+  current layout.
 
 ## Working on tavla
 

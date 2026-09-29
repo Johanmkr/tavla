@@ -80,14 +80,18 @@ tavla init --content-dir ~/notes/tavla
 ```
 
 !!! tip "Try it without touching your own data"
-    The software repo ships with demo content. From the repo root:
+    `tv demo` sets up a playground repo with example projects (a thesis, a
+    teaching job, a paused paper) and prints how to use it:
 
     ```sh
-    tv --content-dir example-content next
-    tv --content-dir example-content project show project-a
+    tv demo
+    export TAVLA_CONTENT_DIR=~/.cache/tavla/demo   # the path tv demo printed
+    tv next
+    tv flow thesis
+    unset TAVLA_CONTENT_DIR                         # back to your own content
     ```
 
-    `example-content/` is not a git repo, so only read commands work there.
+    Every command works there, and `tv demo --reset` starts over.
 
 ## Your first project
 

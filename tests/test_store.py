@@ -133,14 +133,16 @@ def test_other_project_files(basic_content):
     assert content.sources()[0].year == 2017
 
 
-def test_example_content_is_valid():
-    """example-content/ must stay loadable — it's what the docs demo."""
-    root = Path(__file__).parent.parent / "example-content"
+def test_demo_content_is_valid():
+    """The demo content (``tavla demo``, the docs' examples) must stay loadable
+    and pass ``tavla check``."""
+    from tavla.core import check
+
+    root = Path(__file__).parent.parent / "src/tavla/demo_content"
     content = Content.open(root)
-    content.goals()
-    content.tasks()
-    content.deliverables()
-    content.sources()
+    assert {p.id for p in content.projects()} >= {"thesis", "ablations", "teaching"}
+    assert content.tasks() and content.goals() and content.deliverables()
+    assert check.find_problems(content) == []
 
 
 class _Item:

@@ -19,6 +19,11 @@ Update with `tavla update` (`--check` to see what's new first).
   flag overdue work and tasks due before their prerequisites, and a
   "Ready now" line lists what you can start. `--by status` shows a kanban
   board instead, and `--format mermaid` prints the board as a diagram.
+- `tavla demo` sets up a playground content repo with example projects (a
+  thesis, a teaching job, a paused paper), with dates moved to around today.
+  Every command works there, and your own content is never touched.
+- `tavla info` prints versions, paths and content details to paste into a
+  bug report.
 - `tavla goal list -p PROJECT` now lists the goals of each subproject
   under their own heading.
 - Goal and task lists (and `show`) warn when a file's `project:` line names

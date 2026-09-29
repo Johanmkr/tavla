@@ -302,19 +302,17 @@ id or invalid data.
 
 ## Try it on the demo content
 
-From the repo root, without touching your own data:
+`tavla demo` sets up a playground repo with example projects, without touching
+your own data:
 
 ```sh
-tavla --content-dir example-content next
-tavla --content-dir example-content status --deadline-days 365
-tavla --content-dir example-content project show project-a
-tavla --content-dir example-content goal show write-i
-tavla --content-dir example-content task show feedback
-tavla --content-dir example-content idea list --all
+tavla demo                                     # prints the export line below
+export TAVLA_CONTENT_DIR=~/.cache/tavla/demo
+tv next
+tv flow thesis
+tv task done draft-methods                     # write commands work too
+unset TAVLA_CONTENT_DIR                        # back to your own content
 ```
-
-(Read commands only — `example-content/` is not its own git repo, so write
-commands will refuse to run there.)
 
 ## Development
 
