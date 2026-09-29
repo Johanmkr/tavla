@@ -47,6 +47,21 @@ When you save, tavla checks the file (valid fields, known goal, known
 dependencies, no cycles) and commits it. If something is wrong, it restores
 the previous version and tells you why.
 
+## Moving to another project
+
+A goal or task belongs to the project whose folder its file is in. To move
+one, use `--project`, or change the `project:` line while editing in
+`tv ... edit`. tavla then moves the file for you:
+
+```sh
+tv goal edit intro --project thesis   # its tasks move along
+tv task edit fix-plot -p thesis       # a loose task
+tv task edit outline -p thesis -g submit-paper  # a task under a goal there
+```
+
+A task under a goal must stay in its goal's project, so move the goal, or
+give the task a goal in the new project (or `-g none`) at the same time.
+
 ## List-valued options
 
 `--tags` and `--after` take either a replacement list or a set of changes:
@@ -93,7 +108,11 @@ else is free text that tavla never rewrites.
 !!! warning "Commit hand edits yourself"
     tavla only auto-commits its own changes. If you edit a file outside
     `tavla ... edit`, commit it in the content repo afterwards. To have tavla
-    validate your change, open the file with `tavla ... edit` instead.
+    validate your change, open the file with `tavla ... edit` instead, or run
+    `tavla check` afterwards. It reports files that don't load, duplicate ids,
+    unknown goals or dependencies, cycles, and `project:` lines that disagree
+    with the file's folder. `tavla check --fix` moves those files to the
+    project the line names, or resets a line that names no known project.
 
 See [File formats](../reference/file-formats.md) for exactly what each file
 contains.

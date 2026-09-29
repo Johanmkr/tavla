@@ -46,6 +46,7 @@ from tavla.core.parsing import (
     append_to_section,
     checkbox_items,
     ensure_section,
+    read_markdown,
     remove_frontmatter_key,
     remove_yaml_key,
     set_checkbox,
@@ -271,11 +272,12 @@ def _reload(item: Item) -> Item:
     return type(item).load(item.path, item.project)
 
 
-def _fresh(content: Content, item: Item) -> Item:
-    """The item as the store sees it now (with inherited fields etc.)."""
+def _fresh(content: Content, item: Item, path: Path | None = None) -> Item:
+    """The item as the store sees it now (with inherited fields etc.), read
+    from ``path`` if its file has moved."""
     content.refresh()
     items = content.goals() if isinstance(item, Goal) else content.tasks()
-    return next(i for i in items if i.path == item.path)
+    return next(i for i in items if i.path == (path or item.path))
 
 
 def _write_new(content: Content, path: Path, fields: dict[str, Any], body: str) -> None:
@@ -392,21 +394,27 @@ def _check_task_links(content: Content, task: Task) -> None:
     (the task's own file included): the goal must exist in the task's project,
     every dependency must be a known task, and there must be no cycle."""
     content.refresh()
+    error = task_link_error(task, content.goals(), content.tasks())
+    if error:
+        raise ValidationError(f"{task.path}: {error}")
+
+
+def task_link_error(task: Task, goals: Iterable[Goal], tasks: Iterable[Task]) -> str | None:
+    """What is wrong with ``task``'s goal pointer or dependencies, if anything."""
     if task.goal:
-        goal = next((g for g in content.goals() if g.id == task.goal), None)
+        goal = next((g for g in goals if g.id == task.goal), None)
         if goal is None:
-            raise ValidationError(f"{task.path}: unknown goal '{task.goal}'")
+            return f"unknown goal '{task.goal}'"
         if goal.project != task.project:
-            raise ValidationError(
-                f"{task.path}: goal '{goal.id}' is in project {goal.project}, not {task.project}"
-            )
-    deps = {t.id: t.depends_on for t in content.tasks()}
+            return f"goal '{goal.id}' is in project {goal.project}, not {task.project}"
+    deps = {t.id: t.depends_on for t in tasks}
     for dep in task.depends_on:
         if dep not in deps:
-            raise ValidationError(f"{task.path}: depends_on: unknown task '{dep}'")
+            return f"depends_on: unknown task '{dep}'"
     cycle = _find_cycle(task.id, deps)
     if cycle:
-        raise ValidationError(f"{task.path}: dependency cycle: {' -> '.join(cycle)}")
+        return f"dependency cycle: {' -> '.join(cycle)}"
+    return None
 
 
 def _links_changed(old: Item, new: Item) -> bool:
@@ -528,21 +536,87 @@ def _finish_item_change(
     today: dt.date | None,
     *,
     bump: bool,
+    relocating: bool = False,
 ) -> Item:
     """Shared tail of editor and field edits: link checks, id-rename
     propagation, ``updated`` bump, commit."""
     content.refresh()
     _check_unique(content, edited.id, item.path)
-    if isinstance(edited, Task) and _links_changed(item, edited):
+    target = _target_project(content, item, edited, relocating=relocating)
+    if target is not None:
+        edited.project = target.id
+    if isinstance(edited, Task) and (target is not None or _links_changed(item, edited)):
         _check_task_links(content, edited)
+    moves = _project_moves(content, item, target) if target is not None else []
     today = today or dates.local_today()
     if bump and edited.updated == item.updated and edited.updated != today:
         item.path.write_text(set_frontmatter_key(item.path.read_text(), "updated", today))
     paths = [item.path]
     if edited.id != item.id:
         paths += _rename_references(content, item, item.id, edited.id)
+    for src, dst in moves:
+        text = set_frontmatter_key(src.read_text(), "project", target.id)
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_text(text)
+        src.unlink()
+        paths += [src, dst]
+    if target is not None:
+        message += f" -> project {target.id}"
     git_sync.commit(content.root, message, paths)
+    return _fresh(content, item, moves[0][1] if moves else None)
+
+
+def relocate(content: Content, item: Item) -> Item:
+    """Move ``item`` to the project its ``project:`` line names, as if that
+    line had just been edited (a goal's tasks come along). Raises
+    ValidationError, leaving everything in place, if the move isn't possible."""
+    git_sync.require_repo(content.root)
+    message = f"{kind_of(item)}: move {item.id}"
+    return _finish_item_change(
+        content, item, _reload(item), message, None, bump=False, relocating=True
+    )
+
+
+def reset_project_line(content: Content, item: Item) -> Item:
+    """Set ``item``'s ``project:`` line back to the project whose folder it is in."""
+    git_sync.require_repo(content.root)
+    item.path.write_text(set_frontmatter_key(item.path.read_text(), "project", item.project))
+    git_sync.commit(
+        content.root, f"{kind_of(item)}: set project of {item.id} to {item.project}", [item.path]
+    )
     return _fresh(content, item)
+
+
+def _target_project(
+    content: Content, item: Item, edited: Item, *, relocating: bool = False
+) -> Project | None:
+    """The project the edited file's ``project:`` field names, when the edit
+    changed that line (or when ``relocating``) and it is not the project whose
+    directory the file is in. An untouched stale line never blocks an edit."""
+    wanted = edited.meta.get("project")
+    if not relocating and wanted == item.meta.get("project"):
+        return None
+    if wanted is None or str(wanted) == item.project:
+        return None
+    project = next((p for p in content.projects() if p.id == str(wanted)), None)
+    if project is None:
+        raise ValidationError(f"{item.path}: project: unknown project '{wanted}'")
+    return project
+
+
+def _project_moves(content: Content, item: Item, project: Project) -> list[tuple[Path, Path]]:
+    """(from, to) file moves that put ``item`` in ``project``, the item first.
+    A goal takes its tasks along, since a task lives in its goal's project."""
+    subdir = GOALS_DIR if isinstance(item, Goal) else TASKS_DIR
+    moves = [(item.path, project.path / subdir / item.path.name)]
+    if isinstance(item, Goal):
+        moves += [
+            (t.path, project.path / TASKS_DIR / t.path.name) for t in content.goal_tasks(item)
+        ]
+    for _, dst in moves:
+        if dst.exists():
+            raise ValidationError(f"can't move to project {project.id}: {dst} already exists")
+    return moves
 
 
 def finish_edit(
@@ -577,7 +651,7 @@ def finish_project_edit(content: Content, project: Project, session: EditSession
     git_sync.commit(
         content.root,
         _edit_message("project", project.id, edited.id),
-        [project.path / PROJECT_FILE, registry],
+        [project.path / PROJECT_FILE, registry, *_retag_items(project, edited.id)],
     )
     content.refresh()
     return edited
@@ -654,11 +728,31 @@ def set_project_fields(
         raise
     content.refresh()
     registry = sync_registry(content)
+    edited = Project.load(project.path, project.parent)
     git_sync.commit(
-        content.root, f"project: edit {project.id} ({', '.join(changes)})", [path, registry]
+        content.root,
+        f"project: edit {project.id} ({', '.join(changes)})",
+        [path, registry, *_retag_items(project, edited.id)],
     )
     content.refresh()
-    return Project.load(project.path, project.parent)
+    return edited
+
+
+def _retag_items(project: Project, new_id: str) -> list[Path]:
+    """After a project id change, point the ``project:`` lines of its own
+    goals and tasks at ``new_id``. Returns changed files."""
+    if new_id == project.id:
+        return []
+    changed = []
+    for path in sorted(
+        [*project.path.glob(f"{GOALS_DIR}/*.md"), *project.path.glob(f"{TASKS_DIR}/*.md")]
+    ):
+        text = path.read_text()
+        meta, _ = read_markdown(path)
+        if meta.get("project") == project.id:
+            path.write_text(set_frontmatter_key(text, "project", new_id))
+            changed.append(path)
+    return changed
 
 
 # --- append-only capture ------------------------------------------------------

@@ -9,8 +9,18 @@ import typer
 
 from tavla import __version__, config
 from tavla.cli import capture, deliverable, goal, idea, overview, project, task
-from tavla.cli.common import HELP_SETTINGS, State, examples, handles_errors, state
+from tavla.cli.common import (
+    HELP_SETTINGS,
+    JsonOpt,
+    State,
+    emit_json,
+    examples,
+    handles_errors,
+    state,
+)
 from tavla.core import bootstrap, history, migrate, self_update
+from tavla.core import check as checks
+from tavla.core.errors import EXIT_INVALID
 
 app = typer.Typer(
     name="tavla",
@@ -149,6 +159,64 @@ def undo(
         typer.echo(f"  {f}")
     if not dry_run:
         history.undo(root, change)
+
+
+@app.command(
+    rich_help_panel=SETUP,
+    epilog=examples(
+        "tv check # report problems",
+        "tv check --fix # also fix what can be fixed",
+    ),
+)
+@handles_errors
+def check(
+    ctx: typer.Context,
+    fix: Annotated[
+        bool,
+        typer.Option("--fix", help="Fix project: lines by moving files or resetting the line."),
+    ] = False,
+    json_out: JsonOpt = False,
+    content_dir: Annotated[Path | None, typer.Option("--content-dir", hidden=True)] = None,
+) -> None:
+    """Check the content repo for problems, e.g. after editing files by hand.
+
+    Finds files that don't load, duplicate ids, unknown goals or dependencies,
+    dependency cycles, and goals/tasks whose project: line disagrees with the
+    project folder they are in. --fix moves each such file to the project its
+    line names, or resets a line naming no known project; one commit each.
+    Exits with status 3 while problems remain.
+    """
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
+    content = st.content()
+    fixed, failed = checks.fix(content) if fix else ([], [])
+    failed_paths = {p.path for p in failed}
+    problems = failed + [p for p in checks.find_problems(content) if p.path not in failed_paths]
+
+    if st.json:
+        emit_json(
+            {
+                "fixed": fixed,
+                "problems": [
+                    {
+                        "path": str(p.path.relative_to(content.root)),
+                        "message": p.message,
+                        "fixable": p.fixable,
+                    }
+                    for p in problems
+                ],
+            }
+        )
+    else:
+        for line in fixed:
+            typer.echo(line)
+        for p in problems:
+            typer.secho(f"{p.path.relative_to(content.root)}: {p.message}", fg=typer.colors.RED)
+        if not problems:
+            typer.echo("No problems found.")
+        elif any(p.fixable for p in problems):
+            typer.echo("Run `tv check --fix` to fix the project: problems.")
+    if problems:
+        raise typer.Exit(EXIT_INVALID)
 
 
 @app.command(rich_help_panel=SETUP)

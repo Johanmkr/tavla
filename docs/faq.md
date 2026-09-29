@@ -93,6 +93,15 @@ collapsed; `???+` renders expanded. Put it under the section it belongs to.
     afterwards. If you'd rather have tavla validate and commit for you, open
     the file with `tv task edit ID` instead.
 
+    Afterwards, run `tv check` to catch anything tavla would have refused:
+    files that don't load, duplicate ids, unknown goals or dependencies, and
+    cycles.
+
+    One exception: changing the `project:` line in a file you opened yourself
+    does not move it, because the file's folder decides its project.
+    `tv check` lists such files and `tv check --fix` moves them. Or use
+    `tv goal edit ID --project P` in the first place.
+
 ??? question "What happens if I save an invalid file in `tv ... edit`?"
     tavla reports the problem (for example an unknown goal, an unknown
     dependency or a cycle) and restores the previous version, so nothing

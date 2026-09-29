@@ -433,6 +433,70 @@ def test_set_fields_moves_task_to_goal(content):
     assert content.goal("write-intro").tasks_total == 4
 
 
+def test_set_fields_project_moves_goal_and_its_tasks(content, git):
+    old = content.goal("write-intro").path
+    goal = ops.set_fields(
+        content, content.goal("write-intro"), {"project": "project-b"}, today=TODAY
+    )
+    assert goal.project == "project-b"
+    assert goal.path == content.project("project-b").path / "goals/write-intro.md"
+    assert not old.exists()
+    assert goal.tasks_total == 3
+    for task in content.goal_tasks(goal):
+        assert task.project == "project-b"
+        assert "project: project-b" in task.path.read_text()
+    assert _subjects(git, content.root)[0] == (
+        "goal: edit write-intro (project) -> project project-b"
+    )
+    assert _is_clean(git, content.root)
+
+
+def test_set_fields_project_moves_loose_task(content, git):
+    task = ops.set_fields(content, content.task("fix-plot"), {"project": "project-c"}, today=TODAY)
+    assert task.project == "project-c"
+    assert task.path.parent == content.project("project-c").path / "tasks"
+    assert _is_clean(git, content.root)
+
+
+def test_set_fields_project_refused_for_task_under_goal_elsewhere(content, git):
+    task = content.task("draft-related-work")
+    before = task.path.read_text()
+    with pytest.raises(ValidationError, match="is in project project-a"):
+        ops.set_fields(content, task, {"project": "project-b"}, today=TODAY)
+    assert task.path.read_text() == before
+    assert _is_clean(git, content.root)
+
+
+def test_set_fields_unknown_project_restores(content, git):
+    goal = content.goal("write-intro")
+    before = goal.path.read_text()
+    with pytest.raises(ValidationError, match="unknown project"):
+        ops.set_fields(content, goal, {"project": "nope"}, today=TODAY)
+    assert goal.path.read_text() == before
+    assert _is_clean(git, content.root)
+
+
+def test_stale_project_line_does_not_block_other_edits(content, git):
+    goal = content.goal("write-intro")
+    goal.path.write_text(goal.path.read_text().replace("project: project-a", "project: old-name"))
+    git(content.root, "commit", "-qam", "stale")
+    content.refresh()
+    edited = ops.set_fields(
+        content, content.goal("write-intro"), {"status": "blocked"}, today=TODAY
+    )
+    assert edited.project == "project-a"
+    assert edited.status == "blocked"
+
+
+def test_project_rename_updates_project_lines(content, git):
+    project = content.project("project-a")
+    ops.set_project_fields(content, project, {"id": "alpha"})
+    content.refresh()
+    assert "project: alpha" in content.goal("write-intro").path.read_text()
+    assert "project: alpha" in content.task("fix-plot").path.read_text()
+    assert _is_clean(git, content.root)
+
+
 # --- subtasks & updates --------------------------------------------------------
 
 

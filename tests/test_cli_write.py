@@ -133,6 +133,27 @@ def test_goal_edit(run, git_content, git, editor):
     assert _head(git, git_content) == "goal: edit write-intro"
 
 
+def test_goal_edit_project_flag(run, git_content):
+    result = run("goal", "edit", "write-intro", "--project", "project-b")
+    assert result.exit_code == 0, result.output
+    content = Content.open(git_content)
+    assert content.goal("write-intro").project == "project-b"
+    assert content.task("draft-related-work").project == "project-b"
+    assert [g.id for g in content.goals(content.project("project-b"))] == [
+        "write-intro",
+        "write-review",
+    ]
+
+
+def test_goal_edit_project_in_editor_moves_it(run, git_content, git, editor):
+    editor(("project: project-a", "project: project-b"))
+    result = run("goal", "edit", "write-intro")
+    assert result.exit_code == 0, result.output
+    assert Content.open(git_content).goal("write-intro").project == "project-b"
+    assert (git_content / "projects/project-b/goals/write-intro.md").exists()
+    assert _head(git, git_content) == "goal: edit write-intro -> project project-b"
+
+
 def test_task_edit_in_editor(run, git_content, git, editor):
     editor(("- [ ] Write two", "- [x] Write two"))
     result = run("task", "edit", "draft-r")
