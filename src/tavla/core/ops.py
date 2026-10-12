@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from tavla.core import bootstrap, dates, git_sync
+from tavla.core import bootstrap, dates, focus, git_sync, queries
 from tavla.core.entities import (
     DELIVERABLES_DIR,
     GOALS_DIR,
@@ -430,7 +430,8 @@ def _links_changed(old: Item, new: Item) -> bool:
 
 def _rename_references(content: Content, item: Item, old_id: str, new_id: str) -> list[Path]:
     """After a goal/task id change, update tasks that point at the old id
-    (``goal:`` for goals, ``depends_on:`` for tasks). Returns changed files."""
+    (``goal:`` for goals, ``depends_on:`` for tasks) and, for a task you are
+    working on, ``focus.yaml``. Returns changed files."""
     changed = []
     for task in content.tasks():
         if task.path == item.path:
@@ -445,6 +446,8 @@ def _rename_references(content: Content, item: Item, old_id: str, new_id: str) -
             continue
         task.path.write_text(text)
         changed.append(task.path)
+    if isinstance(item, Task):
+        changed += focus.rename(content, old_id, new_id)
     return changed
 
 
@@ -716,7 +719,7 @@ def set_fields(
 
 
 def set_project_fields(
-    content: Content, project: Project, changes: dict[str, Any]
+    content: Content, project: Project, changes: dict[str, Any], *, message: str | None = None
 ) -> Project | None:
     """Set top-level fields in ``project.yaml``. Returns None if nothing changed."""
     git_sync.require_repo(content.root)
@@ -736,11 +739,62 @@ def set_project_fields(
     edited = Project.load(project.path, project.parent)
     git_sync.commit(
         content.root,
-        f"project: edit {project.id} ({', '.join(changes)})",
+        message or f"project: edit {project.id} ({', '.join(changes)})",
         [path, registry, *_retag_items(project, edited.id)],
     )
     content.refresh()
     return edited
+
+
+def stored_folder(folder: Path) -> str:
+    """How a linked folder is written to ``repo_path:``: absolute, with the
+    home directory as ``~`` so the entry works for the same layout on
+    another machine."""
+    folder = folder.expanduser().resolve()
+    home = Path.home().resolve()
+    return f"~/{folder.relative_to(home)}" if folder.is_relative_to(home) else str(folder)
+
+
+def _set_folders(
+    content: Content, project: Project, folders: list[str], message: str
+) -> Project | None:
+    value: Any = None if not folders else folders[0] if len(folders) == 1 else folders
+    return set_project_fields(content, project, {"repo_path": value}, message=message)
+
+
+def link_folder(content: Content, project: Project, folder: Path) -> Project | None:
+    """Add ``folder`` to the project's ``repo_path:``. Returns None if it is
+    already linked. Refused if the folder doesn't exist, or if another
+    project is linked to exactly this folder."""
+    if not folder.expanduser().is_dir():
+        raise ValidationError(f"not a folder: {folder}")
+    entry = stored_folder(folder)
+    target = queries.expand_folder(entry)
+    for other in content.projects():
+        if any(queries.expand_folder(f) == target for f in other.repo_paths):
+            if other.id == project.id:
+                return None
+            raise ValidationError(f"{entry} is already linked to project {other.id}")
+    return _set_folders(
+        content, project, [*project.repo_paths, entry], f"project: link {project.id} to {entry}"
+    )
+
+
+def unlink_folder(content: Content, project: Project, folder: Path | None = None) -> list[str]:
+    """Remove ``folder`` (or, without one, every folder) from the project's
+    ``repo_path:``. Returns the entries removed."""
+    if folder is None:
+        removed = list(project.repo_paths)
+    else:
+        target = folder.expanduser().resolve()
+        removed = [f for f in project.repo_paths if queries.expand_folder(f) == target]
+        if not removed:
+            raise NotFoundError(f"{stored_folder(folder)} isn't linked to project {project.id}")
+    if removed:
+        kept = [f for f in project.repo_paths if f not in removed]
+        what = removed[0] if len(removed) == 1 else f"{len(removed)} folders"
+        _set_folders(content, project, kept, f"project: unlink {what} from {project.id}")
+    return removed
 
 
 def _retag_items(project: Project, new_id: str) -> list[Path]:
@@ -852,6 +906,9 @@ def check_droppable(content: Content, item: Item | Deliverable) -> None:
                 f"goal '{item.id}' still has tasks ({ids}); move or drop them first"
             )
     elif isinstance(item, Task):
+        working = focus.current(content)
+        if working is not None and working.task_id == item.id:
+            raise ValidationError(f"you are working on '{item.id}'; `tv pause` first")
         dependents = [t.id for t in content.tasks() if item.id in t.depends_on]
         if dependents:
             raise ValidationError(

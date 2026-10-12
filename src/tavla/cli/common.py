@@ -16,9 +16,9 @@ from typing import Annotated, Any, ParamSpec, TypeVar
 import typer
 
 from tavla import config
-from tavla.core import ops
+from tavla.core import ops, queries
 from tavla.core.dates import parse_date
-from tavla.core.entities import to_dict
+from tavla.core.entities import Project, to_dict
 from tavla.core.errors import TavlaError, ValidationError
 from tavla.core.ops import EditSession
 from tavla.core.queries import complete_ids
@@ -145,6 +145,33 @@ def drop_item(st: State, content: Content, kind: str, item: Any) -> None:
         raise typer.Abort()
     ops.drop(content, item)
     typer.echo(f"Dropped {kind} {item.id}")
+
+
+GlobalOpt = Annotated[
+    bool,
+    typer.Option("--global", "-G", help="All projects, even inside a linked project folder."),
+]
+
+
+def scoped_project(
+    st: State, content: Content, project_id: str | None, global_: bool
+) -> Project | None:
+    """The project picked by ``-p``; else, unless ``-G``, the project whose
+    linked folder (``repo_path:``) you are in, with a note saying so."""
+    if project_id:
+        return content.project(project_id)
+    if global_:
+        return None
+    found = queries.project_for_dir(content, Path.cwd())
+    if found is None:
+        return None
+    project, folder = found
+    if not st.json:
+        shown = ops.stored_folder(folder)
+        typer.secho(
+            f"Project {project.id} (you are in {shown}); -G for all projects.", dim=True, err=True
+        )
+    return project
 
 
 # Hidden: documented once as a global option, but accepted after any command too.

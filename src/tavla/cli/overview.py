@@ -9,16 +9,19 @@ import typer
 
 from tavla.cli.common import (
     ContentDirOpt,
+    GlobalOpt,
     JsonOpt,
     complete_project,
     emit_json,
     handles_errors,
     progress,
+    scoped_project,
     state,
     table,
 )
+from tavla.cli.focus import working_line
 from tavla.cli.task import subtask_progress
-from tavla.core import dates, queries
+from tavla.core import dates, focus, queries
 from tavla.core.entities import Priority, to_dict
 
 
@@ -61,17 +64,21 @@ def next_(
         typer.Option("--priority", help="Only tasks at or above this priority."),
     ] = None,
     limit: Annotated[int, typer.Option("--limit", "-n", min=0, help="Max tasks (0 = all).")] = 10,
+    global_: GlobalOpt = False,
     json_out: JsonOpt = False,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """What to work on next: open tasks across active projects, most important first.
 
     Tasks waiting on unfinished dependencies are left out. Goals that have no
-    tasks yet are listed after the tasks.
+    tasks yet are listed after the tasks. The task you are working on (`tv
+    work`) is named at the top. Inside a project's linked folder (`tv project
+    link`), only that project is shown unless -G is given.
     """
     st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
-    project = content.project(project_id) if project_id else None
+    project = scoped_project(st, content, project_id, global_)
+    current = focus.current(content)
     tasks = queries.next_tasks(content, project=project, min_priority=priority)
     goals = queries.goals_without_tasks(content, project=project, min_priority=priority)
     shown = tasks[:limit] if limit else tasks
@@ -81,9 +88,13 @@ def next_(
             {
                 "tasks": to_dict(shown, content.root, exclude=("meta", "body")),
                 "goals_without_tasks": to_dict(goals, content.root, exclude=("meta", "body")),
+                "working_on": current.task_id if current else None,
             }
         )
         return
+    working = working_line(content)
+    if working:
+        typer.secho(working, fg=typer.colors.GREEN)
     if not shown and not goals:
         typer.echo("Nothing to do.")
         return
@@ -145,6 +156,9 @@ def status(
         f"{plural(report.open_tasks, 'open task')} ({report.doing_tasks} doing) · "
         f"{len(report.blocked)} blocked"
     )
+    working = working_line(content)
+    if working:
+        typer.secho(working, fg=typer.colors.GREEN)
 
     _heading(f"Stale projects (idle {stale_days}+ days)", len(report.stale))
     for s in report.stale:
@@ -182,3 +196,5 @@ def status(
 
     if report.inbox:
         typer.echo(f"\n{plural(report.inbox, 'idea')} in the inbox (tavla idea list)")
+    if report.todos:
+        typer.echo(f"{plural(report.todos, 'open todo')} (tavla todo)")

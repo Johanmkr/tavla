@@ -8,7 +8,19 @@ from typing import Annotated
 import typer
 
 from tavla import __version__, config
-from tavla.cli import add, capture, deliverable, flow, goal, idea, overview, project, task
+from tavla.cli import (
+    add,
+    capture,
+    deliverable,
+    flow,
+    focus,
+    goal,
+    idea,
+    overview,
+    project,
+    task,
+    todo,
+)
 from tavla.cli.common import (
     HELP_SETTINGS,
     JsonOpt,
@@ -32,6 +44,7 @@ app = typer.Typer(
 )
 
 DAILY = "Daily"
+WORKING = "Working on a task"
 ITEMS = "Projects and what's in them"
 SETUP = "Setup and maintenance"
 
@@ -49,6 +62,29 @@ app.command(
 app.command("add", rich_help_panel=DAILY)(add.add)
 app.command("capture", rich_help_panel=DAILY)(capture.capture)
 app.command("log", rich_help_panel=DAILY)(capture.log)
+app.add_typer(todo.app, name="todo", rich_help_panel=DAILY)
+app.command(
+    "work",
+    rich_help_panel=WORKING,
+    epilog=examples(
+        "tv work draft-methods # start (marks it doing)",
+        "tv work # what am I on, and its subtasks",
+    ),
+)(focus.work)
+app.command(
+    "pause",
+    rich_help_panel=WORKING,
+    epilog=examples('tv pause "figures done, text next"'),
+)(focus.pause)
+app.command(
+    "done",
+    rich_help_panel=WORKING,
+    epilog=examples("tv done # the task you are working on", "tv done fix-plots"),
+)(task.done)
+app.command("tick", rich_help_panel=WORKING, epilog=examples("tv tick 2 3"))(focus.tick)
+app.command("untick", rich_help_panel=WORKING)(focus.untick)
+app.command("subtask", rich_help_panel=WORKING)(focus.subtask)
+app.command("note", rich_help_panel=WORKING)(focus.note)
 app.add_typer(project.app, name="project", rich_help_panel=ITEMS)
 app.add_typer(goal.app, name="goal", rich_help_panel=ITEMS)
 app.add_typer(task.app, name="task", rich_help_panel=ITEMS)

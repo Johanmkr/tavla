@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from tavla.core import bootstrap, ops, parsing
+from tavla.core import bootstrap, focus, ops, parsing
 from tavla.core.entities import (
     DELIVERABLES_DIR,
     GOALS_DIR,
@@ -104,6 +104,15 @@ def find_problems(content: Content) -> list[Problem]:
         error = ops.task_link_error(task, goals, tasks)
         if error:
             problems.append(Problem(task.path, error))
+
+    try:
+        working = focus.current(content)
+    except ValidationError as e:
+        problems.append(_load_problem(focus.focus_path(content), e))
+    else:
+        if working is not None and working.task_id not in {t.id for t in tasks}:
+            message = f"you are working on unknown task '{working.task_id}' (`tv pause` clears it)"
+            problems.append(Problem(working.path, message))
     return problems
 
 

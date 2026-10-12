@@ -91,8 +91,10 @@ tv goal add "Experiments" -p thesis --due 01.12.26 --id exp
 tv task add "Set up the pipeline" -g exp --id pipeline
 tv task add "Run the baseline" -g exp --after pipeline   # waits for pipeline
 tv next                                    # only "pipeline" can start
-tv task done pipeline                      # -> Now unblocked: run-the-baseline
+tv work pipeline                           # start on it; tv tick / tv note act on it
+tv done                                    # -> Now unblocked: run-the-baseline
 tv capture "try mixed precision #speed"    # a quick thought, into the inbox
+tv todo buy HDMI cables                    # a small chore, outside any project
 tv status                                  # stale projects, what's waiting, what's due
 ```
 

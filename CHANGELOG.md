@@ -11,6 +11,35 @@ Update with `tavla update` (`--check` to see what's new first).
 
 ## [Unreleased]
 
+Daily-workflow ideas from issue #21: work on one task at a time, see only the
+project whose folder you are in, and a quick todo list. No content layout
+change: nothing to migrate.
+
+### Features
+- `tavla work TASK` starts working on a task: it is marked doing, and until
+  you `tavla pause` or `tavla done`, the short commands `tick`, `untick`,
+  `subtask` and `note` act on it, and `next` and `status` show it at the top.
+  Starting another task is refused until then. Each stretch of work is logged
+  in the task's `## Sessions` section with its start, end, duration and an
+  optional note. `tavla work` on its own shows the current task.
+- `tavla done [TASK]` finishes the task you are working on (or the one given).
+  `tavla task done` also ends the work session if you were working on the
+  task.
+- `tavla project link PROJECT [FOLDER]` links a folder (default: the current
+  one) to a project, saved in `repo_path:`. Inside a linked folder, `next` and
+  `task list` show only that project; `-G`/`--global` shows everything.
+  `tavla project unlink` removes links.
+- `tavla todo TEXT` adds to a checklist in `todo.md` for small things outside
+  any project. `tavla todo` lists them, and `done`, `reopen`, `drop`, `clear`
+  and `promote` (into a task or goal) manage them. `status` counts open
+  todos.
+- `tavla check` reports a `focus.yaml` that names an unknown task.
+
+### Changes
+- `repo_path:` in `project.yaml` can be a list of folders. In `--json`
+  output, projects have `repo_paths` (a list) instead of `repo_path`.
+- Dropping the task you are working on is refused until you `tavla pause`.
+
 ## [0.3.0] - 2026-09-29
 
 The alpha-testing release. `tavla flow` draws how your work depends on

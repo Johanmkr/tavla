@@ -40,6 +40,46 @@ tv next -p thesis            # one project (works even if it's paused)
 tv next --priority med       # med and above
 ```
 
+### Inside a project folder
+
+Link a project to the folder where its code or files live:
+
+```sh
+cd ~/code/thesis
+tv project link thesis          # or: tv project link thesis ~/code/thesis
+```
+
+From then on, `tv next` and `tv task list` run anywhere inside that folder show
+only that project, with a note saying so. Use `-G` (`--global`) to see
+everything, or `-p` to pick another project. A project can have several
+folders. When folders are nested, the deepest one wins. `tv project unlink
+thesis` removes the links.
+
+## Working on one task: `work`, `pause`, `done`
+
+```console
+$ tv work pipeline
+Working on pipeline (Set up training pipeline). `tv pause` or `tv done` when you stop.
+$ tv tick 2                     # tick subtask 2 of the task you're on
+$ tv subtask Add a smoke test
+$ tv note "toy data works; real data OOMs"
+$ tv work                       # what am I on? (time so far, subtasks)
+$ tv pause "loader done, model next"
+Paused pipeline after 1h35m. `tv work pipeline` to pick it up again.
+```
+
+`tv work TASK` marks the task `doing` and makes it *the* task you are on.
+Until you `tv pause` or `tv done`:
+
+- `tick`, `untick`, `subtask` and `note` act on it, so you don't type its id.
+- `tv next` and `tv status` show it at the top.
+- `tv work OTHER` is refused, so you finish or pause one thing before you
+  start the next.
+
+Each stretch of work (start, end, duration and an optional note) is added to
+the task's `## Sessions` section when you pause or finish. `tv done` with no
+id finishes the task you are on, and `-m "..."` adds a note to the session.
+
 ## `start` and `done`
 
 ```sh
@@ -49,8 +89,27 @@ tv goal start exp
 tv goal done exp
 ```
 
-For any other status (`blocked`, or going back to `todo`), use
-`tv task edit ID --status STATUS`.
+`tv task start` only changes the status. Use `tv work` when you sit down to
+work on the task. For any other status (`blocked`, or going back to `todo`),
+use `tv task edit ID --status STATUS`.
+
+## `todo`: small things outside any project
+
+```sh
+tv todo buy HDMI cables #lab    # add one (quotes optional)
+tv todo                         # list open todos, numbered
+tv todo done 2                  # tick off (by number or a piece of the text)
+tv todo reopen 2
+tv todo promote 3 -p thesis     # turn it into a task (-g for a goal's task)
+tv todo drop 4
+tv todo clear                   # remove the ticked-off ones
+```
+
+Todos are for small chores and things you need to write down quickly. Ideas
+(`tv capture`) are for thoughts to think about later. Todos keep their
+numbers when you tick them off, so `tv todo done 2 5` does what you expect. To
+add a todo that starts with a command word, use `tv todo add list the
+cables`. `tv status` shows how many are open.
 
 ## Subtasks and notes
 
@@ -183,11 +242,12 @@ tools draw as a diagram. Paste it inside a ```` ```mermaid ```` block.
 === "Daily"
 
     ```sh
-    tv next                 # pick something
-    tv task start ID
-    # ...work...
+    tv next                 # pick something (inside a linked folder: that project)
+    tv work ID
+    # ...work, tv tick N, tv note "..."...
+    tv pause "where I stopped"   # or: tv done
     tv log PROJECT "what happened"
-    tv task done ID
+    tv todo                 # the small stuff
     ```
 
 === "Weekly"
@@ -196,5 +256,6 @@ tools draw as a diagram. Paste it inside a ```` ```mermaid ```` block.
     tv status               # stale projects, due soon, waiting
     tv flow PROJECT         # what depends on what, and what can run in parallel
     tv idea list            # triage the inbox: move, promote or drop
+    tv todo                 # promote todos that grew into tasks; tv todo clear
     tv goal list            # any goals ready to close or re-plan?
     ```
