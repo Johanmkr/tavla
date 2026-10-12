@@ -17,6 +17,7 @@ from tavla.cli import (
     goal,
     idea,
     overview,
+    people,
     project,
     task,
     todo,
@@ -90,6 +91,11 @@ app.add_typer(goal.app, name="goal", rich_help_panel=ITEMS)
 app.add_typer(task.app, name="task", rich_help_panel=ITEMS)
 app.add_typer(idea.app, name="idea", rich_help_panel=ITEMS)
 app.add_typer(deliverable.app, name="deliverable", rich_help_panel=ITEMS)
+app.command(
+    "people",
+    rich_help_panel=ITEMS,
+    epilog=examples("tv people", "tv people kari -e # addresses of everyone matching"),
+)(people.people_)
 
 
 def _version_callback(value: bool) -> None:

@@ -12,8 +12,9 @@ Update with `tavla update` (`--check` to see what's new first).
 ## [Unreleased]
 
 Daily-workflow ideas from issue #21: work on one task at a time, see only the
-project whose folder you are in, and a quick todo list. No content layout
-change: nothing to migrate.
+project whose folder you are in, and a quick todo list. People with email
+addresses on goals and tasks (issue #22). No content layout change: nothing
+to migrate; older versions keep the new `people:` lines as they are.
 
 ### Features
 - `tavla work TASK` starts working on a task: it is marked doing, and until
@@ -34,6 +35,16 @@ change: nothing to migrate.
   and `promote` (into a task or goal) manage them. `status` counts open
   todos.
 - `tavla check` reports a `focus.yaml` that names an unknown task.
+- Goals and tasks can list the people involved, with email addresses
+  (issue #22), in a `people:` list in the frontmatter. `--person` on `add`
+  and `edit` takes `Name <email>`, an address or a name. A piece of the name
+  or address of someone already in tavla reuses their entry. On `edit`,
+  `+X`/`-X` adjust the list and `none` clears it. A task also counts its
+  goal's people. `tavla add` asks for them too (optional, `;`-separated).
+- `tavla task|goal people ID` lists who is involved (`-e` prints only the
+  addresses). `tavla task|goal mail ID` opens a new email to all of them
+  with the title as subject (`--print` shows the `mailto:` link).
+  `tavla people` lists everyone and where they appear.
 
 ### Changes
 - `repo_path:` in `project.yaml` can be a list of folders. In `--json`

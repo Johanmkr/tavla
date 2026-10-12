@@ -8,7 +8,7 @@ from typer.testing import CliRunner
 from tavla.cli.add import BACK, Cancelled, Wizard
 from tavla.cli.main import app
 from tavla.core.entities import DeliverableKind, Priority
-from tavla.core.errors import EXIT_INVALID
+from tavla.core.errors import EXIT_INVALID, ValidationError
 from tavla.core.forms import FORMS, UNSET
 from tavla.core.store import Content
 
@@ -329,3 +329,43 @@ def test_full_dialogue_with_keys(content):
         done = Wizard(content, Typing(), lambda line: None).run()
     assert done == ["Added goal keyboard-goal to project-b"]
     assert chunks == []
+
+
+def test_people_on_goal_and_task(content):
+    _run(
+        content,
+        "project-b",
+        "Plan workshop",
+        "change",
+        _field("goal", "people"),
+        "Kari Nordmann <kari.nordmann@example.org>; ola@example.com",
+        "create",
+        False,
+        kind="goal",
+    )
+    goal = content.goal("plan-workshop")
+    assert [str(p) for p in goal.people] == [
+        "Kari Nordmann <kari.nordmann@example.org>",
+        "ola@example.com",
+    ]
+    task_people = _field("task", "people")
+    assert task_people.default(content, {"goal": goal.id}).endswith("(the goal's)")
+    _run(
+        content,
+        goal.id,
+        "Book a room",
+        "change",
+        task_people,
+        "nordmann",  # reuses the known entry
+        "create",
+        False,
+        kind="task",
+    )
+    task = content.task("book-a-room")
+    assert [str(p) for p in task.people] == ["Kari Nordmann <kari.nordmann@example.org>"]
+
+
+def test_people_field_rejects_bad_address(content):
+    parse = _field("task", "people").parse
+    with pytest.raises(ValidationError):
+        parse(content, {}, "Kari <not-an-address>")

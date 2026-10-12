@@ -15,9 +15,9 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from tavla.core import ideas, ops
+from tavla.core import ideas, ops, people
 from tavla.core.dates import parse_date
-from tavla.core.entities import DeliverableKind, GoalStatus, Priority, TaskStatus
+from tavla.core.entities import DeliverableKind, GoalStatus, Person, Priority, TaskStatus
 from tavla.core.errors import ValidationError
 from tavla.core.store import Content
 
@@ -213,6 +213,21 @@ def _task_due_default(content: Content, answers: Answers) -> str:
     return f"{goal.due.isoformat()}  (the goal's)" if goal and goal.due else "–"
 
 
+def _people(content: Content, answers: Answers, raw: str) -> list[Person]:
+    """``;``-separated ``--person`` values: someone already in tavla by a
+    piece of their name or address, or ``Name <email>``, an address, a name."""
+    return people.resolve_all(content, raw.split(";"))
+
+
+def _show_people(value: list[Person]) -> str:
+    return "; ".join(map(str, value)) or "–"
+
+
+def _task_people_default(content: Content, answers: Answers) -> str:
+    goal = _goal_of(content, answers)
+    return f"{_show_people(goal.people)}  (the goal's)" if goal and goal.people else "–"
+
+
 def _fixed(text: str) -> Callable[[Content, Answers], str]:
     return lambda content, answers: text
 
@@ -234,6 +249,8 @@ PRIORITY = Field(
 )
 DUE = Field("due", "Due", parse=_date, fmt=lambda d: d.isoformat())
 TAGS = Field("tags", "Tags", parse=_list)
+PEOPLE_LABEL = "People (Name <email>, or part of a known name; separate with ;)"
+PEOPLE = Field("people", PEOPLE_LABEL, parse=_people, fmt=_show_people)
 
 
 # --- create -----------------------------------------------------------------------
@@ -262,6 +279,7 @@ def _create_goal(content: Content, a: Answers) -> str:
         priority=a.get("priority", Priority.MED),
         due=a.get("due"),
         tags=a.get("tags", []),
+        people=a.get("people", []),
     )
     return f"Added goal {goal.id} to {goal.project}"
 
@@ -278,6 +296,7 @@ def _create_task(content: Content, a: Answers) -> str:
         due=a.get("due"),
         tags=a.get("tags", []),
         depends_on=a.get("depends_on", []),
+        people=a.get("people", []),
     )
     where = f"under goal {task.goal}" if task.goal else f"to {task.project}"
     return f"Added task {task.id} {where}"
@@ -330,7 +349,7 @@ FORMS: dict[str, Form] = {
         Form(
             "goal",
             "an outcome in a project, reached through tasks",
-            [_project_field(), _title_field(), ID, PRIORITY, DUE, TAGS],
+            [_project_field(), _title_field(), ID, PRIORITY, DUE, TAGS, PEOPLE],
             _create_goal,
             keep=("project",),
         ),
@@ -368,6 +387,13 @@ FORMS: dict[str, Form] = {
                     options=lambda content, answers: _open_tasks(content),
                 ),
                 TAGS,
+                Field(
+                    "people",
+                    PEOPLE_LABEL,
+                    parse=_people,
+                    fmt=_show_people,
+                    default=_task_people_default,
+                ),
             ],
             _create_task,
             keep=("goal", "project"),

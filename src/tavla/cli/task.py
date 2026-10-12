@@ -31,7 +31,16 @@ from tavla.cli.common import (
     table,
     warn_misplaced,
 )
-from tavla.core import focus, ops
+from tavla.cli.people import (
+    EmailsOpt,
+    PersonEditOpt,
+    PersonOpt,
+    PrintOpt,
+    mail,
+    print_people_field,
+    show_people,
+)
+from tavla.core import focus, ops, people
 from tavla.core.dates import parse_date
 from tavla.core.entities import Priority, Task, TaskStatus, to_dict
 from tavla.core.store import Content
@@ -106,6 +115,7 @@ def add(
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the title).")
     ] = None,
+    person: PersonOpt = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Create a new task under a goal (-g), or directly in a project (-p), and commit it."""
@@ -123,6 +133,7 @@ def add(
         priority=priority,
         due=parse_date(due) if due else None,
         tags=ops.parse_tags(tags),
+        people=people.resolve_all(content, person or []),
         depends_on=_dep_ids(content, after) if after else (),
     )
     where = f"goal {task.goal}" if task.goal else f"project {task.project}"
@@ -176,6 +187,7 @@ def edit(
             autocompletion=complete_project,
         ),
     ] = None,
+    person: PersonEditOpt = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the task in $EDITOR.
@@ -194,6 +206,8 @@ def edit(
         changes["depends_on"] = _after_change(content, task, after)
     if project_id is not None:
         changes["project"] = content.project(project_id).id
+    if person:
+        changes["people"] = people.to_yaml(people.apply_specs(content, task, person))
     if changes or title is not None:
         edited = ops.set_fields(content, task, changes, title=title)
     else:
@@ -507,5 +521,42 @@ def show(
     for name, value in fields:
         if value:
             typer.echo(f"  {name + ':':<10}{value}")
+    print_people_field(task)
     typer.echo("")
     typer.echo(task.body.rstrip())
+
+
+@app.command(
+    "people",
+    epilog=examples(
+        "tv task people meeting-kari",
+        "tv task people meeting-kari -e # addresses only, one per line",
+    ),
+)
+@handles_errors
+def people_(
+    ctx: typer.Context,
+    task_id: TaskArg,
+    emails: EmailsOpt = False,
+    json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Who is involved in the task, including its goal's people."""
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
+    content = st.content()
+    show_people(st, content.task(task_id), emails)
+
+
+@app.command(
+    "mail", epilog=examples("tv task mail meeting-kari", "tv task mail meeting-kari --print")
+)
+@handles_errors
+def mail_(
+    ctx: typer.Context,
+    task_id: TaskArg,
+    print_only: PrintOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Start an email to everyone involved, with the task title as subject."""
+    content = state(ctx, content_dir=content_dir).content()
+    mail(content.task(task_id), print_only)

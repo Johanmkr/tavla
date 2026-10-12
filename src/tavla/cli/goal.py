@@ -27,7 +27,16 @@ from tavla.cli.common import (
     table,
     warn_misplaced,
 )
-from tavla.core import ops
+from tavla.cli.people import (
+    EmailsOpt,
+    PersonEditOpt,
+    PersonOpt,
+    PrintOpt,
+    mail,
+    print_people_field,
+    show_people,
+)
+from tavla.core import ops, people
 from tavla.core.dates import parse_date
 from tavla.core.entities import Goal, GoalStatus, Priority, TaskStatus, to_dict
 
@@ -59,6 +68,7 @@ def add(
     id_: Annotated[
         str | None, typer.Option("--id", help="Explicit id (default: derived from the title).")
     ] = None,
+    person: PersonOpt = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Create a new goal in a project and commit it."""
@@ -72,6 +82,7 @@ def add(
         priority=priority,
         due=parse_date(due) if due else None,
         tags=ops.parse_tags(tags),
+        people=people.resolve_all(content, person or []),
     )
     typer.echo(f"Added goal {goal.id} to {project.id}")
 
@@ -95,6 +106,7 @@ def edit(
             autocompletion=complete_project,
         ),
     ] = None,
+    person: PersonEditOpt = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the goal in $EDITOR.
@@ -107,6 +119,8 @@ def edit(
     changes = item_changes(goal, status=status, priority=priority, due=due, tags=tags)
     if project_id is not None:
         changes["project"] = content.project(project_id).id
+    if person:
+        changes["people"] = people.to_yaml(people.apply_specs(content, goal, person))
     if changes or title is not None:
         edited = ops.set_fields(content, goal, changes, title=title)
     else:
@@ -325,6 +339,7 @@ def show(
     for name, value in fields:
         if value:
             typer.echo(f"  {name + ':':<10}{value}")
+    print_people_field(goal)
 
     if tasks:
         typer.secho("\nTasks", bold=True)
@@ -334,3 +349,37 @@ def show(
             typer.echo(f"  [{mark}] {t.id}  [{t.status}]  {t.title}{waiting}")
     typer.echo("")
     typer.echo(goal.body.rstrip())
+
+
+@app.command(
+    "people",
+    epilog=examples(
+        "tv goal people write-up",
+        "tv goal people write-up -e # addresses only, one per line",
+    ),
+)
+@handles_errors
+def people_(
+    ctx: typer.Context,
+    goal_id: GoalArg,
+    emails: EmailsOpt = False,
+    json_out: JsonOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Who is involved in the goal."""
+    st = state(ctx, json_out=json_out, content_dir=content_dir)
+    content = st.content()
+    show_people(st, content.goal(goal_id), emails)
+
+
+@app.command("mail", epilog=examples("tv goal mail write-up", "tv goal mail write-up --print"))
+@handles_errors
+def mail_(
+    ctx: typer.Context,
+    goal_id: GoalArg,
+    print_only: PrintOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Start an email to everyone involved, with the goal title as subject."""
+    content = state(ctx, content_dir=content_dir).content()
+    mail(content.goal(goal_id), print_only)

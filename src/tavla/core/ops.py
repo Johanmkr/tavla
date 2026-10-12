@@ -33,6 +33,7 @@ from tavla.core.entities import (
     Goal,
     GoalStatus,
     LogEntry,
+    Person,
     Priority,
     Project,
     ProjectStatus,
@@ -53,7 +54,7 @@ from tavla.core.parsing import (
     set_first_heading,
     set_frontmatter_key,
     set_yaml_key,
-    yaml_inline,
+    yaml_entry,
 )
 from tavla.core.store import Content
 
@@ -144,7 +145,7 @@ def apply_list_spec(current: Iterable[str], spec: str, what: str = "tags") -> li
 
 
 def _yaml_lines(fields: dict[str, Any]) -> str:
-    return "".join(f"{k}: {yaml_inline(v)}\n" for k, v in fields.items())
+    return "".join(yaml_entry(k, v) for k, v in fields.items())
 
 
 def clean_title(title: str) -> str:
@@ -301,6 +302,7 @@ def add_goal(
     priority: Priority = Priority.MED,
     due: dt.date | None = None,
     tags: Iterable[str] = (),
+    people: Iterable[Person] = (),
     today: dt.date | None = None,
     extra_paths: Iterable[Path] = (),
 ) -> Goal:
@@ -320,6 +322,8 @@ def add_goal(
     }
     if due is not None:
         fields["due"] = due
+    if people:
+        fields["people"] = [p.to_yaml() for p in people]
     _write_new(content, path, fields, GOAL_BODY_TEMPLATE.format(title=title))
     content.refresh()
     git_sync.commit(content.root, f"goal: add {goal_id}", [path, *extra_paths])
@@ -337,6 +341,7 @@ def add_task(
     due: dt.date | None = None,
     tags: Iterable[str] = (),
     depends_on: Iterable[str] = (),
+    people: Iterable[Person] = (),
     today: dt.date | None = None,
     extra_paths: Iterable[Path] = (),
 ) -> Task:
@@ -368,6 +373,8 @@ def add_task(
     fields |= {"tags": parse_tags(tags), "created": today, "updated": today}
     if due is not None:
         fields["due"] = due
+    if people:
+        fields["people"] = [p.to_yaml() for p in people]
     _write_new(content, path, fields, TASK_BODY_TEMPLATE.format(title=title))
     try:
         _check_task_links(content, Task.load(path, project.id))

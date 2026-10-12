@@ -127,6 +127,81 @@ def _opt_str(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
+EMAIL_RE = re.compile(r"^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$")
+_NAME_EMAIL_RE = re.compile(r"^(.*?)\s*<\s*([^<>]*?)\s*>$")
+
+
+@dataclass
+class Person:
+    """Someone involved in a goal or task: a name, an email address, or both."""
+
+    name: str | None = None
+    email: str | None = None
+
+    def __str__(self) -> str:
+        if self.name and self.email:
+            return f"{self.name} <{self.email}>"
+        return self.name or self.email or ""
+
+    @property
+    def key(self) -> str:
+        """What makes two entries the same person: the address, else the name."""
+        return (self.email or self.name or "").lower()
+
+    def matches(self, query: str) -> bool:
+        q = query.strip().lower()
+        return bool(q) and (q in (self.name or "").lower() or q in (self.email or "").lower())
+
+    def to_yaml(self) -> dict[str, str]:
+        return {k: v for k, v in (("name", self.name), ("email", self.email)) if v}
+
+    @classmethod
+    def parse(cls, text: str) -> Person:
+        """``Name <email>``, a bare ``email``, or a ``name``."""
+        text = " ".join(str(text).split())
+        m = _NAME_EMAIL_RE.match(text)
+        if m:
+            return cls.of(m[1].strip("\"' ") or None, m[2] or None)
+        if "@" in text and " " not in text:
+            return cls.of(None, text)
+        return cls.of(text or None, None)
+
+    @classmethod
+    def of(cls, name: str | None, email: str | None) -> Person:
+        name = " ".join(name.split()) if name else None
+        email = email.strip() if email else None
+        if not name and not email:
+            raise ValidationError("a person needs a name or an email address")
+        if email and not EMAIL_RE.match(email):
+            raise ValidationError(f"'{email}' doesn't look like an email address")
+        return cls(name or None, email or None)
+
+
+def _people(value: Any, path: Path) -> list[Person]:
+    """The ``people:`` list: ``{name, email}`` mappings or ``Name <email>`` strings."""
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValidationError(f"{path}: 'people' must be a list")
+    people = []
+    for n, entry in enumerate(value, start=1):
+        try:
+            if isinstance(entry, dict):
+                unknown = set(entry) - {"name", "email"}
+                if unknown:
+                    raise ValidationError(
+                        f"unknown field(s) {', '.join(sorted(map(str, unknown)))}"
+                    )
+                people.append(Person.of(_opt_str(entry.get("name")), _opt_str(entry.get("email"))))
+            elif isinstance(entry, str):
+                people.append(Person.parse(entry))
+            else:
+                raise ValidationError("expected 'name:'/'email:' or \"Name <email>\"")
+        except ValidationError as e:
+            raise ValidationError(f"{path}: people entry {n}: {e}") from None
+    return people
+
+
 # --- entities ---------------------------------------------------------------
 
 PROJECT_FILE = "project.yaml"
@@ -197,6 +272,7 @@ class Goal:
     created: dt.date | None = None
     updated: dt.date | None = None
     due: dt.date | None = None
+    people: list[Person] = field(default_factory=list)
     # Filled in by the store from the tasks pointing at this goal.
     tasks_done: int = 0
     tasks_total: int = 0
@@ -219,6 +295,7 @@ class Goal:
             created=_date(meta.get("created"), "created", path),
             updated=_date(meta.get("updated"), "updated", path),
             due=_date(meta.get("due"), "due", path),
+            people=_people(meta.get("people"), path),
             body=body,
             meta=meta,
         )
@@ -258,15 +335,24 @@ class Task:
     subtasks_done: int = 0
     subtasks_total: int = 0
     subtasks: list[Subtask] = field(default_factory=list)
-    # Filled in by the store: unfinished dependencies, and inherited fields.
+    people: list[Person] = field(default_factory=list)
+    # Filled in by the store: unfinished dependencies, inherited fields, and
+    # the goal's people (shown with the task's own, see ``everyone``).
     waiting_on: list[str] = field(default_factory=list)
     inherited: list[str] = field(default_factory=list)
+    goal_people: list[Person] = field(default_factory=list)
     body: str = field(default="", repr=False)
     meta: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @property
     def is_waiting(self) -> bool:
         return bool(self.waiting_on)
+
+    @property
+    def everyone(self) -> list[Person]:
+        """The task's own people, then its goal's (each person once)."""
+        seen = {p.key for p in self.people}
+        return [*self.people, *(p for p in self.goal_people if p.key not in seen)]
 
     @classmethod
     def load(cls, path: Path, project: str) -> Task:
@@ -298,6 +384,7 @@ class Task:
             subtasks_done=sum(s.done for s in subtasks),
             subtasks_total=len(subtasks),
             subtasks=subtasks,
+            people=_people(meta.get("people"), path),
             body=body,
             meta=meta,
         )
