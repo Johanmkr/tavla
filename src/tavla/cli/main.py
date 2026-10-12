@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -24,6 +25,7 @@ from tavla.cli import (
 )
 from tavla.cli.common import (
     HELP_SETTINGS,
+    ContentDirOpt,
     JsonOpt,
     State,
     emit_json,
@@ -40,7 +42,7 @@ from tavla.core.errors import EXIT_INVALID, TavlaError
 app = typer.Typer(
     name="tavla",
     help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
-    no_args_is_help=True,
+    invoke_without_command=True,
     context_settings=HELP_SETTINGS,
 )
 
@@ -122,6 +124,30 @@ def main(
     ] = False,
 ) -> None:
     ctx.obj = State(content_dir, json_out, yes, verbose)
+    if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
+        # Bare `tv`: the TUI in a terminal; help when piped or scripted.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            ui(ctx)
+            raise typer.Exit()
+        typer.echo(ctx.get_help())
+        raise typer.Exit(2)
+
+
+@app.command(
+    rich_help_panel=DAILY,
+    epilog=examples("tv ui", "tv # the same, when run in a terminal"),
+)
+@handles_errors
+def ui(ctx: typer.Context, content_dir: ContentDirOpt = None) -> None:
+    """Open the full-screen view: projects, goals, tasks and their detail.
+
+    It reloads by itself when anything changes the content repo (the CLI in
+    another shell, `tv undo`, ...). Press ? inside for the keys.
+    """
+    content = state(ctx, content_dir=content_dir).content()
+    from tavla.tui.app import run  # Textual is only imported when needed
+
+    run(content.root)
 
 
 @app.command(rich_help_panel=SETUP)

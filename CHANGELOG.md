@@ -46,7 +46,18 @@ to migrate; older versions keep the new `people:` lines as they are.
   with the title as subject (`--print` shows the `mailto:` link).
   `tavla people` lists everyone and where they appear.
 
+- `tavla ui` opens a full-screen view, laid out like lazygit: status,
+  projects, goals and tasks (with ideas and deliverables tabs) on the left,
+  and the selected task's detail or a project's or goal's flow board on the
+  right. Single keys mark things done, start work sessions, add notes,
+  tasks, goals, ideas and todos, set priority and due dates, drop and undo,
+  and `e` opens `$EDITOR`. It reloads by itself whenever the content repo
+  changes. Running `tavla` (or `tv`) with no command in a terminal opens it
+  too; piped or in scripts it still prints help. See
+  [The full-screen view](docs/guide/tui.md).
+
 ### Changes
+- tavla now depends on Textual (for `tavla ui`); other commands don't load it.
 - `repo_path:` in `project.yaml` can be a list of folders. In `--json`
   output, projects have `repo_paths` (a list) instead of `repo_path`.
 - Dropping the task you are working on is refused until you `tavla pause`.
