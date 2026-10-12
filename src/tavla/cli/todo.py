@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-import click
 import typer
 from typer.core import TyperGroup
 
@@ -25,9 +24,9 @@ class _AddByDefault(TyperGroup):
     """``tv todo buy milk`` means ``tv todo add buy milk``: words that aren't a
     subcommand are a new todo."""
 
-    def resolve_command(
-        self, ctx: click.Context, args: list[str]
-    ) -> tuple[str | None, click.Command | None, list[str]]:
+    # Untyped on purpose: newer typer bundles its own click, so the click
+    # package may not be installed.
+    def resolve_command(self, ctx: Any, args: list[str]) -> Any:
         if args and args[0] not in self.commands and not args[0].startswith("-"):
             args = ["add", *args]
         return super().resolve_command(ctx, args)
