@@ -223,11 +223,23 @@ def yaml_inline(value: Any) -> str:
     return text.removesuffix("\n...\n").strip()
 
 
+def yaml_entry(key: str, value: Any) -> str:
+    """``key: value`` as YAML line(s): one line, except that a non-empty list
+    of mappings (like ``people:``) is written block style, one item each."""
+    if not (isinstance(value, list) and value and all(isinstance(v, dict) for v in value)):
+        return f"{key}: {yaml_inline(value)}\n"
+    lines = [f"{key}:\n"]
+    for item in value:
+        for i, (k, v) in enumerate(item.items()):
+            lines.append(f"{'  - ' if i == 0 else '    '}{k}: {yaml_inline(v)}\n")
+    return "".join(lines)
+
+
 def set_yaml_key(text: str, key: str, value: Any) -> str:
     """Set top-level ``key`` in a YAML mapping document, touching only its line(s)."""
     lines = text.splitlines(keepends=True)
     key_re = re.compile(rf"^{re.escape(key)}\s*:")
-    new_line = f"{key}: {yaml_inline(value)}\n"
+    new_line = yaml_entry(key, value)
     for i, line in enumerate(lines):
         if key_re.match(line):
             j = i + 1
@@ -237,7 +249,7 @@ def set_yaml_key(text: str, key: str, value: Any) -> str:
             # Keep a trailing "# comment" on a single-line value, unless quotes
             # make it unclear where the value ends.
             comment = _TRAILING_COMMENT_RE.match(line.rstrip("\n"))
-            if j == i + 1 and comment:
+            if j == i + 1 and comment and new_line.count("\n") == 1:
                 new_line = f"{new_line.rstrip()}{comment.group(1)}\n"
             return "".join([*lines[:i], new_line, *lines[j:]])
     if lines and not lines[-1].endswith("\n"):

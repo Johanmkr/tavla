@@ -181,6 +181,7 @@ class Content:
                 if task.due is None and goal.due is not None:
                     task.due = goal.due
                     task.inherited.append("due")
+                task.goal_people = list(goal.people)
             # A dependency on an unknown id counts as unfinished, so a typo is
             # noticed rather than silently ignored.
             task.waiting_on = [d for d in task.depends_on if status_by_id.get(d) != TaskStatus.DONE]

@@ -59,6 +59,42 @@ $ tv task show mixed
 To make a task inherit again after you've given it its own value, use
 `tv task edit ID --priority none` (or `--due none`).
 
+## People
+
+A goal or task can list the people involved, with their email addresses:
+
+```sh
+tv task add "Arrange meeting with Kari" -p thesis \
+    --person "Kari Nordmann <kari.nordmann@example.org>" --person "ana@example.org"
+tv task edit meeting --person +nordmann     # reuse someone already in tavla
+tv task edit meeting --person -ana          # remove (a piece of name or address)
+tv task edit meeting --person none          # clear the list
+tv goal edit write-up --person "Ana Berg <ana@example.org>"
+```
+
+`--person` takes `Name <email>`, an address, or a name. A piece of the name or
+address of someone already listed on another goal or task reuses that entry,
+so you type an address once. If it matches several people, tavla lists them
+and changes nothing. Give a plain value (no `+` or `-`) to replace the whole
+list.
+
+People on a goal are involved in each of its tasks too. `task show` and `task
+people` list them, marked `(from goal)`. To remove one, edit the goal.
+
+```sh
+tv task people meeting          # who is involved
+tv task people meeting -e       # addresses only, one per line
+tv task mail meeting            # a new email to all of them, task title as subject
+tv task mail meeting --print    # just print the mailto: link
+tv people                       # everyone in tavla, and where they appear
+tv people kari -e              # addresses of everyone matching "kari"
+```
+
+The same `people` and `mail` commands work on goals.
+
+In `tv add`, goals and tasks have an optional **People** field in the review.
+Separate several people with `;`.
+
 ## Dependencies
 
 `--after` makes a task wait for other tasks:

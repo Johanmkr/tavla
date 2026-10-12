@@ -19,6 +19,10 @@ tags: []
 created: 2026-09-25
 updated: 2026-09-26
 # priority / due: optional; inherited from the goal when left out
+people:                         # optional; who is involved (goals too)
+  - name: Kari Nordmann
+    email: kari.nordmann@example.org
+  - name: Ana Berg              # a name, an email, or both
 ---
 
 # Draft related work
@@ -39,6 +43,11 @@ What to do, links, acceptance criteria — anything you like.
 ## Updates
 - 2026-09-26: found the key survey
 ```
+
+Each `people:` entry needs a name, an email address, or both. You can also
+write an entry on one line, as `- Kari Nordmann <kari.nordmann@example.org>`.
+`tv check` reports entries it can't read. A task's goal's people count as
+involved in the task too.
 
 The `## Sessions` section appears after your first `tv work` session ends.
 Each line is one stretch of work. A session that runs past midnight has the
