@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, TypeVar
 
 from tavla.core import dates
@@ -106,6 +108,25 @@ def last_activity(content: Content, project: Project) -> dt.date | None:
     return max(candidates, default=None)
 
 
+def expand_folder(folder: str) -> Path:
+    """A ``repo_path:`` entry as an absolute path (``~`` and ``$VARS`` expanded)."""
+    return Path(os.path.expandvars(os.path.expanduser(folder))).resolve()
+
+
+def project_for_dir(content: Content, directory: Path) -> tuple[Project, Path] | None:
+    """The project linked to ``directory`` (or the closest folder above it),
+    and the linked folder. When folders are nested, the deepest one wins."""
+    directory = directory.resolve()
+    best: tuple[Project, Path] | None = None
+    for project in content.projects():
+        for folder in map(expand_folder, project.repo_paths):
+            if directory.is_relative_to(folder) and (
+                best is None or len(folder.parts) > len(best[1].parts)
+            ):
+                best = (project, folder)
+    return best
+
+
 # --- next ---------------------------------------------------------------------
 
 
@@ -197,6 +218,8 @@ class StatusReport:
     goals_ready: list[Goal] = field(default_factory=list)
     deadlines: list[Deliverable] = field(default_factory=list)
     inbox: int = 0
+    todos: int = 0
+    working_on: str | None = None
 
 
 def status(
@@ -216,7 +239,12 @@ def status(
     - goals_ready: open goals whose tasks are all done
     - deadlines: unfinished deliverables due within ``deadline_days`` (incl. overdue)
     - inbox: number of ideas waiting in the inbox
+    - todos: number of open todos
+    - working_on: the task you are working on (``tv work``), if any
     """
+    # Imported here: both modules build on the store, which imports this one.
+    from tavla.core import focus, todos
+
     today = today or dates.local_today()
     active = active_projects(content)
     active_ids = {p.id for p in active}
@@ -281,4 +309,6 @@ def status(
         ),
         deadlines=deadlines,
         inbox=len(content.inbox()),
+        todos=len(todos.open_todos(content)),
+        working_on=working.task_id if (working := focus.current(content)) else None,
     )

@@ -10,6 +10,7 @@ from tavla.cli.common import (
     DATE_HELP,
     TAGS_EDIT_HELP,
     ContentDirOpt,
+    GlobalOpt,
     JsonOpt,
     TextArg,
     YesOpt,
@@ -25,11 +26,12 @@ from tavla.cli.common import (
     is_clear,
     item_changes,
     progress,
+    scoped_project,
     state,
     table,
     warn_misplaced,
 )
-from tavla.core import ops
+from tavla.core import focus, ops
 from tavla.core.dates import parse_date
 from tavla.core.entities import Priority, Task, TaskStatus, to_dict
 from tavla.core.store import Content
@@ -218,20 +220,46 @@ def start(ctx: typer.Context, task_id: TaskArg, content_dir: ContentDirOpt = Non
         )
 
 
-@app.command()
+@app.command(
+    epilog=examples(
+        "tv task done fix-plots",
+        'tv done -m "sent to Ana" # the task you are working on',
+    )
+)
 @handles_errors
-def done(ctx: typer.Context, task_id: TaskArg, content_dir: ContentDirOpt = None) -> None:
-    """Mark a task done (sets status and updated; the body is left untouched)."""
+def done(
+    ctx: typer.Context,
+    task_id: Annotated[
+        str | None,
+        typer.Argument(
+            metavar="[ID]",
+            help="Task to finish (default: the one you are working on).",
+            autocompletion=complete_task,
+        ),
+    ] = None,
+    note: Annotated[
+        str | None,
+        typer.Option("--note", "-m", help="Note for the work session, if one ends."),
+    ] = None,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Mark a task done (default: the one you are working on).
+
+    Sets status and updated; the body is left untouched. If you are working
+    on the task (`tv work`), the session ends and is logged too.
+    """
     content = state(ctx, content_dir=content_dir).content()
-    task = content.task(task_id)
+    task = content.task(task_id) if task_id else focus.focused_task(content)
     # Tasks waiting on nothing but this one: they become available now.
     unblocked = [
         t.id for t in content.tasks() if t.waiting_on == [task.id] and t.status != TaskStatus.DONE
     ]
-    if ops.complete(content, task) is None:
+    finished, session = focus.finish(content, task, note=note)
+    if finished is None:
         typer.echo(f"{task.id} is already done.")
         return
-    typer.echo(f"Done: {task.id} ({task.title})")
+    took = f" after {focus.format_duration(session.duration)}" if session else ""
+    typer.echo(f"Done: {task.id} ({task.title}){took}")
     remaining = task.subtasks_total - task.subtasks_done
     if remaining:
         typer.secho(
@@ -256,7 +284,7 @@ def print_subtasks(task: Task) -> None:
         typer.echo(f"  {s.number:>2}. [{'x' if s.done else ' '}] {s.text}")
 
 
-def _set_subtasks(content: Content, task: Task, refs: list[str], *, done: bool) -> None:
+def set_subtasks(content: Content, task: Task, refs: list[str], *, done: bool) -> None:
     subtasks = [ops.resolve_subtask(task, ref) for ref in refs]
     edited = ops.check_subtasks(content, task, subtasks, done=done)
     if edited is None:
@@ -295,7 +323,7 @@ def check(
     if not refs:
         print_subtasks(task)
         return
-    _set_subtasks(content, task, refs, done=True)
+    set_subtasks(content, task, refs, done=True)
 
 
 @app.command()
@@ -305,7 +333,7 @@ def uncheck(
 ) -> None:
     """Untick subtasks."""
     content = state(ctx, content_dir=content_dir).content()
-    _set_subtasks(content, content.task(task_id), refs, done=False)
+    set_subtasks(content, content.task(task_id), refs, done=False)
 
 
 @app.command(epilog=examples("tv task subtask draft-r Write the conclusion"))
@@ -390,16 +418,19 @@ def list_(
         TaskStatus | None, typer.Option("--status", help="Only tasks with this status.")
     ] = None,
     all_: Annotated[bool, typer.Option("--all", "-a", help="Include done tasks.")] = False,
+    global_: GlobalOpt = False,
     json_out: JsonOpt = False,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """List tasks, highest priority first. Done tasks are hidden unless asked for.
 
     A * after the status means the task is waiting on unfinished dependencies.
+    Inside a project's linked folder (`tv project link`), only that project's
+    tasks are listed unless -G is given.
     """
     st = state(ctx, json_out=json_out, content_dir=content_dir)
     content = st.content()
-    project = content.project(project_id) if project_id else None
+    project = scoped_project(st, content, project_id, global_)
     tasks = content.tasks(project)
     if goal_id is not None:
         goal = content.goal(goal_id)

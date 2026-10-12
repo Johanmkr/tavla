@@ -4,8 +4,9 @@ All files are plain text. Dates are always stored as `YYYY-MM-DD`.
 
 ## Task: `tasks/<id>.md`
 
-tavla reads the frontmatter, the `# title`, the `## Subtasks` checkboxes and
-the `## Ideas` bullets. Everything else is yours and is never rewritten.
+tavla reads the frontmatter, the `# title`, the `## Subtasks` checkboxes, the
+`## Ideas` bullets and the `## Sessions` lines. Everything else is yours and is
+never rewritten.
 
 ```markdown
 ---
@@ -32,9 +33,17 @@ What to do, links, acceptance criteria — anything you like.
 ## Ideas
 - Contrast with #tempering methods
 
+## Sessions
+- 2026-09-26 09:30-11:05 (1h35m): first pass   <- added by `tv pause` / `tv done`
+
 ## Updates
 - 2026-09-26: found the key survey
 ```
+
+The `## Sessions` section appears after your first `tv work` session ends.
+Each line is one stretch of work. A session that runs past midnight has the
+end date as well (`2026-09-26 23:30-2026-09-27 01:00`). The duration in
+brackets is only for you to read; tavla works it out from the times.
 
 ## Goal: `goals/<id>.md`
 
@@ -51,9 +60,13 @@ status: active          # active | paused | done | archived
 priority: high          # high | med | low
 tags: [bayesian, sampling]
 related: [project-b]
-repo_path: ~/code/project-a
+repo_path: ~/code/project-a   # or a list: [~/code/project-a, ~/papers/a]
 created: 2026-01-10
 ```
+
+`repo_path` lists the folders where the project's code or files live (`tv
+project link` adds one). Inside one of them, `tv next` and `tv task list` show
+only this project.
 
 ## Deliverable: `deliverables/<id>.yaml`
 
@@ -78,6 +91,18 @@ Each idea is one bullet line. Any `#word` in it is a tag.
 - Look into parallel tempering #mcmc
 ```
 
+## Todos: `todo.md`
+
+A checklist at the root of the content repo. `tv todo` adds, ticks and
+removes the lines. A plain `- text` bullet counts as an open todo.
+
+```markdown
+# Todo
+
+- [ ] Buy HDMI cables #lab
+- [x] Return library books
+```
+
 ## Log: `log.md`
 
 `tavla log` appends one timestamped line per call. You can also add lines by
@@ -87,3 +112,11 @@ hand.
 
 `tavla.yaml` (the layout version) and `registry.yaml` (the index of top-level
 projects) are managed by tavla. Don't edit them by hand.
+
+`focus.yaml` exists only while you are working on a task (`tv work`). It names
+the task and when you started, and `tv pause` or `tv done` removes it:
+
+```yaml
+task: draft-related-work
+since: 2026-09-26 09:30
+```

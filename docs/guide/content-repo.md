@@ -17,6 +17,8 @@ git history is the record of your work. You can edit the files yourself too;
 ├── tavla.yaml                 # content layout version (maintained by tavla)
 ├── registry.yaml              # index of top-level projects (maintained by tavla)
 ├── inbox.md                   # `tavla capture` / `idea add` land here
+├── todo.md                    # `tavla todo` checklist
+├── focus.yaml                 # the task you are working on (only while you are)
 ├── library/                   # reading notes (planned: Zotero sync)
 └── projects/
     └── adaptive-sampling/

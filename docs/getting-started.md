@@ -160,10 +160,13 @@ commands.
 
 ```sh
 tv next                          # what to work on, across all projects
-tv task start outline            # todo -> doing
+tv work outline                  # start on it (todo -> doing)
 tv task edit outline             # open the task file in $EDITOR
+tv note "two sections, not three"   # goes on the task you're working on
+tv pause                         # stop for now; the session is logged
 tv log adap "outline agreed with supervisor"
-tv task done outline             # -> Now unblocked: draft-related-work
+tv done outline                  # -> Now unblocked: draft-related-work
+tv todo return library books     # small stuff outside any project
 tv capture "look into parallel tempering #mcmc"   # quick thought -> inbox
 tv status                        # what's stale, waiting, or due soon
 tv flow adap                     # how the goals and tasks depend on each other

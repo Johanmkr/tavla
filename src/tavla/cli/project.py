@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
+from pathlib import Path
 from typing import Annotated
 
 import typer
@@ -211,7 +212,7 @@ def show(
         ("priority", project.priority),
         ("tags", ", ".join(project.tags)),
         ("related", ", ".join(project.related)),
-        ("repo_path", project.repo_path),
+        ("repo_path", ", ".join(project.repo_paths)),
         ("created", fmt_date(project.created)),
         ("path", project.path.relative_to(content.root)),
     ]
@@ -248,3 +249,58 @@ def show(
         typer.secho("\nRecent log", bold=True)
         for entry in log[-RECENT_LOG_ENTRIES:]:
             typer.echo(f"  {entry.date.isoformat()}  {entry.text}")
+
+
+FolderArg = Annotated[
+    Path | None,
+    typer.Argument(metavar="[FOLDER]", help="The folder (default: the current one)."),
+]
+
+
+@app.command(
+    epilog=examples(
+        "cd ~/code/thesis && tv project link thesis",
+        "tv project link thesis ~/papers/thesis-draft # a second folder",
+    )
+)
+@handles_errors
+def link(
+    ctx: typer.Context,
+    project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
+    folder: FolderArg = None,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Link a folder (e.g. the project's code) to the project.
+
+    Inside a linked folder or below it, `tv next` and `tv task list` show just
+    this project (-G shows everything). Saved in repo_path:, with your home
+    directory written as ~.
+    """
+    content = state(ctx, content_dir=content_dir).content()
+    project = content.project(project_id)
+    folder = folder or Path.cwd()
+    if ops.link_folder(content, project, folder) is None:
+        typer.echo(f"{ops.stored_folder(folder)} is already linked to {project.id}.")
+        return
+    typer.echo(f"Linked {ops.stored_folder(folder)} to project {project.id}")
+
+
+@app.command()
+@handles_errors
+def unlink(
+    ctx: typer.Context,
+    project_id: Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)],
+    folder: Annotated[
+        Path | None,
+        typer.Argument(metavar="[FOLDER]", help="The folder to unlink (default: all of them)."),
+    ] = None,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Remove a linked folder from the project (all of them if none is given)."""
+    content = state(ctx, content_dir=content_dir).content()
+    project = content.project(project_id)
+    removed = ops.unlink_folder(content, project, folder)
+    if not removed:
+        typer.echo(f"{project.id} has no linked folders.")
+    for entry in removed:
+        typer.echo(f"Unlinked {entry} from project {project.id}")

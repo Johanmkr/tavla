@@ -18,7 +18,7 @@ def capture(
     ],
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Append a thought, idea or todo to the inbox for later triage (see `idea`)."""
+    """Append a thought or idea to the inbox for later triage (see `idea`; todos: `todo`)."""
     content = state(ctx, content_dir=content_dir).content()
     line = ideas.add(content, ideas.scope_of(content, None), " ".join(text))
     typer.echo(f"Captured: {line}")

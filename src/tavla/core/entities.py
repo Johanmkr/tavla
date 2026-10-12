@@ -151,7 +151,9 @@ class Project:
     parent: str | None = None
     tags: list[str] = field(default_factory=list)
     related: list[str] = field(default_factory=list)
-    repo_path: str | None = None
+    # Folders (``repo_path:``, one or a list) where the project's code or
+    # files live; inside one, ``next`` and ``task list`` show just this project.
+    repo_paths: list[str] = field(default_factory=list)
     created: dt.date | None = None
     meta: dict[str, Any] = field(default_factory=dict, repr=False)
 
@@ -175,7 +177,7 @@ class Project:
             parent=parent,
             tags=_str_list(meta.get("tags"), "tags", path),
             related=_str_list(meta.get("related"), "related", path),
-            repo_path=_opt_str(meta.get("repo_path")),
+            repo_paths=_str_list(meta.get("repo_path"), "repo_path", path),
             created=_date(meta.get("created"), "created", path),
             meta=meta,
         )
