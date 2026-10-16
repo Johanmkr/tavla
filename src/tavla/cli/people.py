@@ -79,7 +79,7 @@ def mail(item: Goal | Task, print_only: bool) -> None:
         typer.echo(url)
         return
     typer.echo(f"Opening a new email to {sum(bool(p.email) for p in involved)} people…")
-    if typer.launch(url) != 0:
+    if not people.open_mailto(url):
         typer.echo(url)
 
 

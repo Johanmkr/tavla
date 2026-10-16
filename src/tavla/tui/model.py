@@ -51,9 +51,16 @@ class Row:
     ref: Any = None
     disabled: bool = False
     search: str = ""  # what `/` filters on
+    column: str = ""  # which column owns it (see the app's scopes)
+    marked: bool = False  # `v` multi-select
 
     def matches(self, query: str) -> bool:
         return query.lower() in self.search.lower()
+
+    def mark(self) -> None:
+        """Draw the row as marked (see :func:`mark_prompt`) and remember it."""
+        self.prompt = mark_prompt(self.prompt)
+        self.marked = True
 
 
 @dataclass(frozen=True)
@@ -119,6 +126,19 @@ def two_columns(left: Text, right: Text | str = "") -> RenderableType:
     return grid
 
 
+def mark_prompt(prompt: RenderableType) -> RenderableType:
+    """A marked row: a reverse-video bar in front of the row's own renderable
+    (which is often the two-column grid, so prefixing the text won't do)."""
+    bar = Text("▌ ", style="reverse")
+    if isinstance(prompt, Text):
+        return bar + prompt
+    grid = Table.grid(expand=True, padding=(0, 0))
+    grid.add_column(no_wrap=True)
+    grid.add_column(ratio=1)
+    grid.add_row(bar, prompt)
+    return grid
+
+
 def heading(text: str) -> Text:
     return Text(text, style="bold")
 
@@ -130,77 +150,6 @@ def dim(text: str) -> Text:
 # --- panes --------------------------------------------------------------------------
 
 
-def status_rows(content: Content, now: dt.datetime | None = None) -> list[Row]:
-    """The Status pane: what you are working on, what needs attention, open todos."""
-    now = now or dates.local_now()
-    rows: list[Row] = []
-    current = focus.current(content)
-    if current is None:
-        rows.append(Row("working", "working", Text("○ not working  (w to start)", style="dim")))
-    else:
-        left = Text.assemble(("▶ ", "bold cyan"), (current.task_id, "bold"))
-        took = Text(focus.format_duration(current.elapsed(now)), style="cyan")
-        rows.append(Row("working", "working", two_columns(left, took), ref=current.task_id))
-    report = queries.status(content, today=now.date())
-    overdue = sum(1 for t in report.due_tasks if t.due and t.due < now.date())
-    parts = []
-    if overdue:
-        parts.append((f"! {overdue} overdue", "bold red"))
-    if report.blocked:
-        parts.append((f"✗ {len(report.blocked)} blocked", "red"))
-    if report.inbox:
-        parts.append((f"{report.inbox} inbox", "dim"))
-    summary = Text(" · ").join(Text(t, style=s) for t, s in parts) if parts else dim("✓ all clear")
-    rows.append(
-        Row("summary", "summary", two_columns(summary), disabled=True, search=summary.plain)
-    )
-    for todo in todos.open_todos(content):
-        rows.append(
-            Row(
-                f"todo:{todo.number}",
-                "todo",
-                Text.assemble(("☐ ", "dim"), todo.text),
-                ref=todo,
-                search=todo.text,
-            )
-        )
-    return rows
-
-
-def _project_depth(content: Content, project: Project) -> int:
-    depth, parent = 0, project.parent
-    by_id = {p.id: p for p in content.projects()}
-    while parent is not None and parent in by_id:
-        depth, parent = depth + 1, by_id[parent].parent
-    return depth
-
-
-def project_rows(content: Content, *, show_all: bool = False) -> list[Row]:
-    active = {p.id for p in queries.active_projects(content)}
-    rows = []
-    for p in content.projects():
-        if not show_all and p.id not in active:
-            continue
-        open_count = sum(
-            1 for t in content.tasks(p, recursive=False) if t.status != TaskStatus.DONE
-        )
-        mark = PROJECT_MARKS[p.status]
-        left = Text("  " * _project_depth(content, p))
-        left.append(p.id, style="dim" if p.id not in active else "")
-        if mark:
-            left.append(f" {mark}", style="dim")
-        rows.append(
-            Row(
-                f"project:{p.id}",
-                "project",
-                two_columns(left, dim(str(open_count)) if open_count else ""),
-                ref=p,
-                search=f"{p.id} {p.title}",
-            )
-        )
-    return rows
-
-
 def loose_tasks(content: Content, project: Project) -> list[Task]:
     goal_ids = {g.id for g in content.goals()}
     return [t for t in content.tasks(project, recursive=False) if t.goal not in goal_ids]
@@ -209,10 +158,11 @@ def loose_tasks(content: Content, project: Project) -> list[Task]:
 def goal_rows(
     content: Content, project: Project | None, *, show_all: bool = False, today: dt.date
 ) -> list[Row]:
+    """A project's goals, then `(loose)` when it has tasks without one."""
     if project is None:
         return []
     rows = []
-    for g in sorted(content.goals(project, recursive=False), key=flow._sort_key):
+    for g in sorted(content.goals(project, recursive=False), key=queries.order_key):
         if not show_all and g.status == TaskStatus.DONE:
             continue
         state = goal_state(g, content.goal_tasks(g))
@@ -236,6 +186,30 @@ def goal_rows(
     return rows
 
 
+def goal_column_rows(
+    content: Content, project: Project, *, show_all: bool = False, today: dt.date
+) -> list[Row]:
+    """The goal column of a project: its goals, then the project's
+    deliverables and the tasks without a goal (decision 15)."""
+    rows = goal_rows(content, project, show_all=show_all, today=today)
+    for row in rows:
+        row.column = "goal"
+    deliverables = deliverable_rows(content, Context("project", project.id), today=today)
+    deliverable_row = Row(
+        f"deliverables:{project.id}",
+        "deliverables",
+        two_columns(dim("◆ deliverables"), dim(str(len(deliverables))) if deliverables else ""),
+        ref=project,
+        search="deliverables",
+        column="goal",
+    )
+    # After the goals, before `(loose)` when there is one: always present, so
+    # there is somewhere to press `a` even in a project with no deliverables.
+    loose_at = next((n for n, r in enumerate(rows) if r.kind == "loose"), len(rows))
+    rows.insert(loose_at, deliverable_row)
+    return rows
+
+
 def _progress(goal: Goal) -> str:
     return f"{goal.tasks_done}/{goal.tasks_total}" if goal.tasks_total else "-"
 
@@ -250,25 +224,23 @@ def context_tasks(content: Content, ctx: Context, *, show_all: bool = False) -> 
         return []
     if ctx.kind == "goal":
         goal = next((g for g in content.goals() if g.id == ctx.goal), None)
-        tasks = flow._order(content.goal_tasks(goal)) if goal else []
+        tasks = content.goal_tasks(goal) if goal else []
     elif ctx.kind == "loose":
         tasks = loose_tasks(content, project)
     else:
         tasks = content.tasks(project, recursive=False)
     ranked = {t.id: n for n, t in enumerate(queries.next_tasks(content, project=project))}
-    if ctx.kind != "goal":
-        # Ready work first (in `next` order), then what waits, then what's done.
-        tasks = sorted(
-            tasks,
-            key=lambda t: (
-                t.status == TaskStatus.DONE,
-                t.id not in ranked,
-                ranked.get(t.id, 0),
-                *flow._sort_key(t),
-            ),
-        )
-    else:
-        tasks = sorted(tasks, key=lambda t: t.status == TaskStatus.DONE)
+    # Ready work first (in `next` order), then whatever waits, then the done
+    # ones; inside each group the display order `J`/`K` writes.
+    tasks = sorted(
+        tasks,
+        key=lambda t: (
+            t.status == TaskStatus.DONE,
+            ctx.kind != "goal" and t.id not in ranked,
+            ranked.get(t.id, 0) if ctx.kind != "goal" else 0,
+            *queries.order_key(t),
+        ),
+    )
     if not show_all:
         tasks = [t for t in tasks if t.status != TaskStatus.DONE]
     return tasks
@@ -306,31 +278,6 @@ def task_rows(
     return rows
 
 
-def idea_owner(content: Content, ctx: Context) -> Project | Goal | None:
-    """Whose ideas the Ideas tab shows: the inbox (None), a project or a goal."""
-    if ctx.kind == "all":
-        return None
-    if ctx.kind == "goal":
-        goal = next((g for g in content.goals() if g.id == ctx.goal), None)
-        if goal is not None:
-            return goal
-    return next((p for p in content.projects() if p.id == ctx.project), None)
-
-
-def idea_rows(content: Content, ctx: Context) -> list[Row]:
-    scope = ideas.scope_of(content, idea_owner(content, ctx))
-    return [
-        Row(
-            f"idea:{scope.label}:{r.number}",
-            "idea",
-            two_columns(Text.assemble(("· ", "dim"), r.idea.text)),
-            ref=r,
-            search=r.idea.text,
-        )
-        for r in ideas.read(scope)
-    ]
-
-
 def deliverable_rows(content: Content, ctx: Context, *, today: dt.date) -> list[Row]:
     if ctx.kind == "all":
         active = queries.active_projects(content)
@@ -354,16 +301,255 @@ def deliverable_rows(content: Content, ctx: Context, *, today: dt.date) -> list[
     return rows
 
 
+# --- scope columns --------------------------------------------------------------------
+
+
+def heading_row(key: str, text: str, *, column: str, count: int | None = None) -> Row:
+    """A section heading inside a column (``IDEAS``, ``TODAY``): dim, and not
+    selectable — it carries no ``ref``, so no verb applies to it."""
+    right = dim(str(count)) if count is not None else ""
+    return Row(
+        key,
+        "heading",
+        two_columns(heading(text) if count else Text(text, style="bold dim"), right),
+        disabled=True,
+        search=text,
+        column=column,
+    )
+
+
+def hidden_row(column: str, count: int) -> Row:
+    """A dim marker for the rows `/` hid in a column (decision 17): kept so it
+    is obvious that a list is filtered rather than short."""
+    return Row(
+        f"hidden:{column}",
+        "hidden",
+        Text(f"  … {count} hidden by the filter", style="dim italic"),
+        disabled=True,
+        column=column,
+    )
+
+
+def task_row(task: Task, *, column: str, today: dt.date, working: str | None = None) -> Row:
+    """One task line: state, id, due date, subtask progress."""
+    state = task_state(task)
+    style = "dim" if state == CardState.DONE else "bold" if task.id == working else ""
+    left = Text.assemble(marker(state), " ", (task.id, style))
+    right = Text()
+    if task.status != TaskStatus.DONE:
+        right.append_text(short_due(task.due, today))
+    if task.subtasks_total:
+        right.append(f" {task.subtasks_done}/{task.subtasks_total}", style="dim")
+    return Row(
+        f"task:{task.id}",
+        "task",
+        two_columns(left, right),
+        ref=task,
+        search=f"{task.id} {task.title} {' '.join(task.tags)}",
+        column=column,
+    )
+
+
+def next_column_rows(
+    content: Content, *, show_all: bool = False, today: dt.date, working: str | None = None
+) -> list[Row]:
+    """The `next` column: the ranking, then goals that still need breaking
+    down. With ``show_all`` (``V``), the done tasks follow."""
+    rows = [
+        task_row(t, column="list", today=today, working=working)
+        for t in queries.next_tasks(content)
+    ]
+    for g in queries.goals_without_tasks(content):
+        rows.append(
+            Row(
+                f"goal:{g.id}",
+                "goal",
+                two_columns(
+                    Text.assemble(marker(goal_state(g, [])), " ", (g.id, "")),
+                    Text.assemble(dim("no tasks "), short_due(g.due, today)),
+                ),
+                ref=g,
+                search=f"{g.id} {g.title}",
+                column="list",
+            )
+        )
+    if show_all:
+        rows += [
+            task_row(t, column="list", today=today, working=working)
+            for t in sorted(
+                (t for t in content.tasks() if t.status == TaskStatus.DONE),
+                key=queries.order_key,
+            )
+        ]
+    return rows
+
+
+def inbox_rows(content: Content, *, today: dt.date) -> list[Row]:
+    scope = ideas.scope_of(content, None)
+    refs = ideas.read(scope)
+    rows = [heading_row("heading:ideas", "IDEAS", column="list", count=len(refs))]
+    rows += [
+        Row(
+            f"idea:{scope.label}:{r.number}",
+            "idea",
+            two_columns(Text.assemble(("· ", "dim"), r.idea.text)),
+            ref=r,
+            search=r.idea.text,
+            column="list",
+        )
+        for r in refs
+    ]
+    open_todos = todos.open_todos(content)
+    rows.append(heading_row("heading:chores", "CHORES", column="list", count=len(open_todos)))
+    rows += [
+        Row(
+            f"todo:{t.number}",
+            "todo",
+            two_columns(Text.assemble(("☐ ", "dim"), t.text)),
+            ref=t,
+            search=t.text,
+            column="list",
+        )
+        for t in open_todos
+    ]
+    return rows
+
+
+def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = None) -> list[Row]:
+    """The agenda: the health report, today's chores, then everything dated.
+
+    Every row but the headings points at the item it came from, so `enter`
+    can jump to it in the hierarchy.
+    """
+    now = now or dates.local_now()
+    report = queries.status(content, today=today)
+    rows: list[Row] = [heading_row("heading:status", "STATUS", column="list")]
+    for stale in report.stale:
+        idle = f"{stale.days_idle}d idle" if stale.days_idle is not None else "no activity"
+        rows.append(
+            Row(
+                f"stale:{stale.project.id}",
+                "project",
+                two_columns(Text.assemble(("☾ ", "dim"), stale.project.id), dim(idle)),
+                ref=stale.project,
+                search=f"{stale.project.id} {stale.project.title} stale",
+                column="list",
+            )
+        )
+    for task in report.waiting:
+        rows.append(
+            Row(
+                f"waiting:{task.id}",
+                "task",
+                two_columns(
+                    Text.assemble(marker(task_state(task)), " ", task.id),
+                    dim(f"after {', '.join(task.waiting_on)}"),
+                ),
+                ref=task,
+                search=f"{task.id} {task.title} waiting",
+                column="list",
+            )
+        )
+    for goal in report.goals_ready:
+        rows.append(
+            Row(
+                f"ready:{goal.id}",
+                "goal",
+                two_columns(
+                    Text.assemble(marker(CardState.DONE), " ", goal.id),
+                    dim("all tasks done"),
+                ),
+                ref=goal,
+                search=f"{goal.id} {goal.title} ready",
+                column="list",
+            )
+        )
+
+    rows.append(heading_row("heading:today", "TODAY", column="list", count=report.todos))
+    rows += [
+        Row(
+            f"todo:{t.number}",
+            "todo",
+            two_columns(Text.assemble(("☐ ", "dim"), t.text)),
+            ref=t,
+            search=t.text,
+            column="list",
+        )
+        for t in todos.open_todos(content)
+    ]
+
+    def dated(when: dt.date | None, key: str, kind: str, ref: Any, search: str, *text: Any) -> Row:
+        """A row of the date list: the date on the left, the item to its right."""
+        stamp = Text(f"{(when or today):%d %b} ", style="bold" if when and when < today else "")
+        return Row(
+            key,
+            kind,
+            two_columns(Text.assemble(stamp, *text), short_due(when, today)),
+            ref=ref,
+            search=f"{search} {when or ''}",
+            column="list",
+        )
+
+    entries: list[tuple[dt.date, Row]] = []
+    for t in report.due_tasks:
+        row = dated(
+            t.due,
+            f"due:{t.id}",
+            "task",
+            t,
+            f"{t.id} {t.title} due",
+            marker(task_state(t)),
+            " ",
+            t.id,
+        )
+        entries.append((t.due, row))
+    for g in report.due_goals:
+        row = dated(
+            g.due,
+            f"due:{g.id}",
+            "goal",
+            g,
+            f"{g.id} {g.title} due",
+            marker(goal_state(g, [])),
+            " ",
+            g.id,
+        )
+        entries.append((g.due, row))
+    for d in report.deadlines:
+        row = dated(
+            d.deadline, f"deadline:{d.id}", "deliverable", d, f"{d.id} {d.title}", "◆ ", d.id
+        )
+        entries.append((d.deadline, row))
+    current = focus.current(content)
+    working = next((t for t in content.tasks() if t.id == report.working_on), None)
+    if current is not None and working is not None:
+        row = dated(
+            today,
+            f"session:{working.id}",
+            "task",
+            working,
+            f"{working.id} {working.title} working",
+            Text("▶ ", style="bold cyan"),
+            (working.id, "bold"),
+        )
+        entries.append((today, row))
+    for _, row in sorted(entries, key=lambda pair: (pair[0], pair[1].key)):
+        rows.append(row)
+    return rows
+
+
 # --- detail pane --------------------------------------------------------------------
 
 
 @dataclass
 class Line:
-    """A line of the detail pane; lines with a ``subtask`` can be selected."""
+    """A line of the detail pane; lines with a ``subtask`` can be selected,
+    lines with a ``card`` point back at a board card."""
 
     prompt: RenderableType
     subtask: Subtask | None = None
     key: str = ""
+    card: str | None = None
 
 
 def _lines(*texts: RenderableType) -> list[Line]:
@@ -504,6 +690,23 @@ def loose_detail(content: Content, project: Project, *, today: dt.date) -> list[
     return lines
 
 
+def deliverables_detail(content: Content, project: Project, *, today: dt.date) -> list[Line]:
+    """The project's deliverables, the way ``loose_detail`` lists loose tasks."""
+    lines = _lines(heading(f"Deliverables in {project.id}"), Text(""))
+    for d in content.deliverables(project):
+        lines.append(
+            Line(
+                two_columns(
+                    Text.assemble(("◆ ", "dim"), (d.title, "bold" if d.deadline else "")),
+                    Text.assemble(dim(d.status.value), " ", short_due(d.deadline, today)),
+                )
+            )
+        )
+    if len(lines) == 2:
+        lines.append(Line(Text("No deliverables yet.", style="dim italic")))
+    return lines
+
+
 def idea_detail(ref: ideas.IdeaRef) -> list[Line]:
     lines = _lines(Text(ref.idea.text, style="bold"), dim(f"idea {ref.ref}"))
     if ref.idea.tags:
@@ -522,72 +725,6 @@ def deliverable_detail(d: Deliverable, *, today: dt.date) -> list[Line]:
         lines.append(Line(Text.assemble(dim("venue      "), d.venue)))
     if d.coauthors:
         lines.append(Line(Text.assemble(dim("coauthors  "), ", ".join(d.coauthors))))
-    return lines
-
-
-def status_detail(content: Content, *, today: dt.date) -> list[Line]:
-    """Like ``tv status``: what needs attention across active projects."""
-    report = queries.status(content, today=today)
-    lines = _lines(
-        heading(f"Status · {today:%A %d %B}"),
-        dim(
-            f"{report.active_projects} active projects · {report.open_tasks} open tasks "
-            f"({report.doing_tasks} doing)"
-        ),
-    )
-
-    def section(title: str, rows: list[RenderableType]) -> None:
-        if rows:
-            lines.append(Line(Text("")))
-            lines.append(Line(heading(f"{title} ({len(rows)})")))
-            lines.extend(Line(r) for r in rows)
-
-    section(
-        "Due soon",
-        [
-            two_columns(
-                Text.assemble("  ", marker(task_state(t)), " ", t.id), short_due(t.due, today)
-            )
-            for t in report.due_tasks
-        ],
-    )
-    section(
-        "Blocked",
-        [Text.assemble("  ", marker(CardState.BLOCKED), " ", t.id) for t in report.blocked],
-    )
-    section(
-        "Waiting on others",
-        [
-            Text.assemble(
-                "  ",
-                marker(CardState.WAITING),
-                " ",
-                t.id,
-                dim(f"  after {', '.join(t.waiting_on)}"),
-            )
-            for t in report.waiting
-        ],
-    )
-    section(
-        "Deadlines",
-        [two_columns(Text(f"  {d.id}"), short_due(d.deadline, today)) for d in report.deadlines],
-    )
-    section(
-        "Goals ready to close",
-        [Text.assemble("  ", marker(CardState.DONE), " ", g.id) for g in report.goals_ready],
-    )
-    section(
-        "Stale projects",
-        [
-            two_columns(
-                Text(f"  {s.project.id}"),
-                dim(f"{s.days_idle}d idle" if s.days_idle is not None else "no activity"),
-            )
-            for s in report.stale
-        ],
-    )
-    if report.inbox:
-        lines += _lines(Text(""), dim(f"{report.inbox} ideas in the inbox (Ideas tab)"))
     return lines
 
 
@@ -626,7 +763,15 @@ def _card_lines(card: flow.Card, width: int) -> list[Text]:
 
 def flow_lines(board: Board, width: int) -> list[Line]:
     """The board's stages as side-by-side columns of one-line cards (each
-    followed by its items), or stacked stage by stage when too narrow."""
+    followed by its items), or stacked stage by stage when too narrow.
+
+    A card's first line carries its id in ``card``, so the full-screen board
+    can jump back into the hierarchy from the card under the cursor."""
+
+    def card_head(card: flow.Card, width: int) -> Line:
+        texts = _card_lines(card, width)
+        return Line(texts[0], card=card.id if card.kind != "external" else None)
+
     columns = [c for c in board.columns if c.cards]
     lines: list[Line] = []
     if not columns:
@@ -634,25 +779,31 @@ def flow_lines(board: Board, width: int) -> list[Line]:
     n = len(columns)
     col_width = (width - COLUMN_GAP * (n - 1)) // n if n else width
     if col_width >= MIN_COLUMN:
-        cells = []
+        cells: list[list[Text]] = []
+        ids: list[dict[int, str]] = []
         for col in columns:
             cell = [Text(col.label, style="bold underline")]
+            card_at: dict[int, str] = {}
             for card in col.cards:
+                if card.kind != "external":
+                    card_at[len(cell)] = card.id
                 cell += _card_lines(card, col_width)
             cells.append(cell)
+            ids.append(card_at)
         for i in range(max(len(c) for c in cells)):
             row = Text()
+            card = None
             for j, cell in enumerate(cells):
                 part = cell[i].copy() if i < len(cell) else Text("")
+                card = card or ids[j].get(i)
                 if j < n - 1:
                     part.pad_right(col_width - part.cell_len + COLUMN_GAP)
                 row.append_text(part)
-            lines.append(Line(row))
+            lines.append(Line(row, card=card))
     else:
         for col in columns:
             lines.append(Line(Text(col.label, style="bold underline")))
-            for card in col.cards:
-                lines += [Line(t) for t in _card_lines(card, width)]
+            lines += [card_head(card, width) for card in col.cards]
     if board.ready:
         ready = Text("Ready now ", style="bold")
         for item in board.ready[:6]:

@@ -234,7 +234,9 @@ def _goal_warnings(
 
 
 def _order(tasks: list[Task]) -> list[Task]:
-    """Tasks in dependency order (stage by stage), for listing inside a card."""
+    """Tasks in dependency order (stage by stage), each stage in display order,
+    for listing inside a card."""
+    tasks = sorted(tasks, key=queries.order_key)
     by_id = {t.id: t for t in tasks}
     layers = stages(by_id, {t.id: t.depends_on for t in tasks})
     return [by_id[i] for layer in layers for i in layer]
@@ -288,7 +290,8 @@ def _layout(cards: list[Card]) -> list[Column]:
 
 
 def _sort_key(item: Goal | Task) -> tuple:
-    return (item.priority.rank, item.due or dt.date.max, item.id)
+    """Display order of a goal or task (see :func:`queries.order_key`)."""
+    return queries.order_key(item)
 
 
 def goal_board(
@@ -297,7 +300,7 @@ def goal_board(
     """Tasks of ``goal`` in stages, each listing its subtasks."""
     today = today or dates.local_today()
     all_tasks = {t.id: t for t in content.tasks()}
-    tasks = sorted(content.goal_tasks(goal), key=_sort_key)
+    tasks = sorted(content.goal_tasks(goal), key=queries.order_key)
     if open_only:
         tasks = [t for t in tasks if t.status != TaskStatus.DONE]
     ids = {t.id for t in tasks}
@@ -354,7 +357,7 @@ def project_board(
         goals = [g for g in goals if g.status != TaskStatus.DONE]
         tasks = [t for t in tasks if t.status != TaskStatus.DONE]
     goal_ids = {g.id for g in goals}
-    loose = sorted((t for t in tasks if t.goal not in goal_ids), key=_sort_key)
+    loose = sorted((t for t in tasks if t.goal not in goal_ids), key=queries.order_key)
     loose_ids = {t.id for t in loose}
 
     def node(task_id: str) -> str | None:
@@ -421,8 +424,8 @@ def status_board(
     today: dt.date | None = None,
 ) -> Board:
     """Tasks of a project (and its subprojects) or a goal in one column per
-    status, most important first. ``after`` lists only unfinished
-    prerequisites, since that is what keeps a todo task waiting."""
+    status, startable work first, then in display order. ``after`` lists only
+    unfinished prerequisites, since that is what keeps a todo task waiting."""
     today = today or dates.local_today()
     all_tasks = {t.id: t for t in content.tasks()}
     if isinstance(target, Goal):
@@ -431,8 +434,11 @@ def status_board(
     else:
         project = target
         tasks = content.tasks(target)
-    order = {t.id: n for n, t in enumerate(queries.next_tasks(content, project=project))}
-    tasks = sorted(tasks, key=lambda t: (order.get(t.id, len(order)), *_sort_key(t)))
+    startable = [t.id for t in queries.next_tasks(content, project=project)]
+    ready_ids = set(startable)
+    # Startable work first (the ``ready`` line below is the same set), then the
+    # rest, each group in display order.
+    tasks = sorted(tasks, key=lambda t: (t.id not in ready_ids, *queries.order_key(t)))
     columns = []
     for status in STATUS_COLUMNS:
         if open_only and status == TaskStatus.DONE:
@@ -446,7 +452,7 @@ def status_board(
                 cards.append(card)
         columns.append(Column(status.value, cards))
     in_scope = {t.id for t in tasks}
-    ready = [all_tasks[i] for i in order if i in in_scope]
+    ready = [all_tasks[i] for i in startable if i in in_scope]
     return Board(
         "goal" if isinstance(target, Goal) else "project",
         target.id,

@@ -35,7 +35,7 @@ def v1(tmp_path) -> Path:
 
 def test_plan(v1):
     plan = migrate.plan(v1)
-    assert (plan.from_version, plan.to_version, plan.needed) == (1, 2, True)
+    assert (plan.from_version, plan.to_version, plan.needed) == (1, bootstrap.SCHEMA_VERSION, True)
     moves = {m.goal_id: [(t.id, t.done) for t in m.tasks] for m in plan.moves}
     assert moves == {
         "setup-env": [("request-cluster-account", True), ("build-container", True)],
@@ -54,11 +54,11 @@ def test_plan(v1):
 def test_apply(v1):
     assert migrate.apply(migrate.plan(v1))
     assert _git(v1, "log", "--format=%s").splitlines() == [
-        "migrate: content layout v1 -> v2",
+        f"migrate: content layout v1 -> v{bootstrap.SCHEMA_VERSION}",
         "initial",
     ]
     assert _git(v1, "status", "--porcelain") == ""
-    assert bootstrap.schema_version(v1) == 2
+    assert bootstrap.schema_version(v1) == bootstrap.SCHEMA_VERSION
 
     content = Content.open(v1)
     goal = content.goal("write-intro")
@@ -87,6 +87,31 @@ def test_apply_is_idempotent(v1):
     plan = migrate.plan(v1)
     assert not plan.needed
     assert migrate.apply(plan) is False
+
+
+def test_v2_needs_only_the_version_bump(content_copy):
+    """v3 only adds the optional `order:` field, so a v2 repo migrates with a
+    version bump and nothing else: no files move, `order:` is never written."""
+    (content_copy / "tavla.yaml").write_text("schema_version: 2\n")
+    before = sorted(p.relative_to(content_copy) for p in content_copy.rglob("*.md"))
+    plan = migrate.plan(content_copy)
+    assert (plan.from_version, plan.to_version, plan.moves) == (
+        2,
+        bootstrap.SCHEMA_VERSION,
+        [],
+    )
+    assert plan.needed
+    _git(content_copy, "init", "--quiet")
+    _git(content_copy, "add", "--all")
+    _git(content_copy, "commit", "--quiet", "-m", "initial")
+    assert migrate.apply(plan)
+    assert (
+        _git(content_copy, "log", "-1", "--format=%s").strip() == "migrate: content layout v2 -> v3"
+    )
+    assert bootstrap.schema_version(content_copy) == bootstrap.SCHEMA_VERSION
+    assert sorted(p.relative_to(content_copy) for p in content_copy.rglob("*.md")) == before
+    task = Content.open(content_copy).task("draft-related-work")
+    assert task.order is None
 
 
 def test_nested_checkboxes_become_subtasks_and_notes_survive(v1):

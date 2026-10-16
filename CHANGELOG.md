@@ -13,8 +13,10 @@ Update with `tavla update` (`--check` to see what's new first).
 
 Daily-workflow ideas from issue #21: work on one task at a time, see only the
 project whose folder you are in, and a quick todo list. People with email
-addresses on goals and tasks (issue #22). No content layout change: nothing
-to migrate; older versions keep the new `people:` lines as they are.
+addresses on goals and tasks (issue #22). The full-screen view became a
+drill-down column layout with multi-select, dependency editing, move and
+reorder (`tavla ui`), which needs content layout **v3**: run `tavla migrate`
+once (see Upgrading).
 
 ### Features
 - `tavla work TASK` starts working on a task: it is marked doing, and until
@@ -46,21 +48,32 @@ to migrate; older versions keep the new `people:` lines as they are.
   with the title as subject (`--print` shows the `mailto:` link).
   `tavla people` lists everyone and where they appear.
 
-- `tavla ui` opens a full-screen view, laid out like lazygit: status,
-  projects, goals and tasks (with ideas and deliverables tabs) on the left,
-  and the selected task's detail or a project's or goal's flow board on the
-  right. Single keys mark things done, start work sessions, add notes,
-  tasks, goals, ideas and todos, set priority and due dates, drop and undo,
-  and `e` opens `$EDITOR`. It reloads by itself whenever the content repo
-  changes. Running `tavla` (or `tv`) with no command in a terminal opens it
-  too; piped or in scripts it still prints help. See
+- `tavla ui` (or bare `tavla`/`tv` in a terminal) is now a drill-down view:
+  `PROJECT | GOAL | TASK | preview`, with `1`-`4` switching scope between a
+  project, `next`, the inbox and the agenda. Single keys mark things done,
+  start work sessions, add at the cursor's level, set priority and due dates,
+  move items, edit dependencies (`a`/`A`) and people (`@`), and `e` opens
+  `$EDITOR`. `v` marks rows so a verb acts on all of them, `J`/`K` arrange a
+  list (writing `order:`), `f` opens the flow board full screen, `/` filters
+  every column. It reloads by itself whenever the content repo changes. Piped
+  or in scripts it still prints help. See
   [The full-screen view](docs/guide/tui.md).
 
 ### Changes
 - tavla now depends on Textual (for `tavla ui`); other commands don't load it.
+- Tasks accept an optional `order:` number, which sets where they sit in their
+  goal's (or project's) list, ahead of priority and due date. `tv task list`,
+  `tv next` and `tv flow` sort by it, `tv task edit ID --order N` writes it,
+  and `tv ui`'s `J`/`K` rewrites it for a whole column in one commit.
 - `repo_path:` in `project.yaml` can be a list of folders. In `--json`
   output, projects have `repo_paths` (a list) instead of `repo_path`.
 - Dropping the task you are working on is refused until you `tavla pause`.
+
+### Upgrading
+- Content layout v2 → v3: only the version in `tavla.yaml` changes (v3 adds
+  the optional `order:` line to task files, and nothing needs rewriting). Run
+  `tavla migrate` once after updating; `tavla migrate --dry-run` shows what it
+  would do.
 
 ## [0.3.0] - 2026-09-29
 

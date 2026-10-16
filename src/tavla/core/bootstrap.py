@@ -18,8 +18,9 @@ PROJECTS_DIR = "projects"
 SCHEMA_FILE = "tavla.yaml"
 
 # Version of the content layout. 1: tasks only (no tavla.yaml). 2: goals/,
-# tasks/ with goal pointers, depends_on, ## Ideas sections.
-SCHEMA_VERSION = 2
+# tasks/ with goal pointers, depends_on, ## Ideas sections. 3: optional
+# `order:` on tasks (the TUI's J/K).
+SCHEMA_VERSION = 3
 
 REGISTRY_HEADER = "# Master index of top-level projects — managed by tavla.\n"
 _REGISTRY_TEMPLATE = REGISTRY_HEADER + "[]\n"

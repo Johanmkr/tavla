@@ -127,6 +127,18 @@ def _opt_str(value: Any) -> str | None:
     return None if value is None else str(value)
 
 
+def _int(value: Any, name: str, path: Path) -> int | None:
+    """An optional whole number (``order: 3``): '' and None mean unset."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        raise ValidationError(f"{path}: '{name}' must be a whole number, not a yes/no")
+    try:
+        return int(str(value).strip())
+    except (TypeError, ValueError):
+        raise ValidationError(f"{path}: '{name}' must be a whole number") from None
+
+
 EMAIL_RE = re.compile(r"^[^@\s<>,]+@[^@\s<>,]+\.[^@\s<>,]+$")
 _NAME_EMAIL_RE = re.compile(r"^(.*?)\s*<\s*([^<>]*?)\s*>$")
 
@@ -332,6 +344,9 @@ class Task:
     created: dt.date | None = None
     updated: dt.date | None = None
     due: dt.date | None = None
+    # Where the task sits in its goal's (or its project's loose) list; without
+    # it the order comes from priority, due date and id. Written by `J`/`K`.
+    order: int | None = None
     subtasks_done: int = 0
     subtasks_total: int = 0
     subtasks: list[Subtask] = field(default_factory=list)
@@ -381,6 +396,7 @@ class Task:
             created=_date(meta.get("created"), "created", path),
             updated=_date(meta.get("updated"), "updated", path),
             due=_date(meta.get("due"), "due", path),
+            order=_int(meta.get("order"), "order", path),
             subtasks_done=sum(s.done for s in subtasks),
             subtasks_total=len(subtasks),
             subtasks=subtasks,

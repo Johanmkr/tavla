@@ -111,9 +111,9 @@ file layout comes with a `tavla migrate` step, so upgrading never strands it.
 
 **Works today:** projects and subprojects, goals, tasks with subtasks and
 dependencies, ideas and the inbox, progress logs, deliverables, `next`,
-`status`, the `flow` board, `undo`, `check`, `demo` and `--json` output.
-**Next:** an interactive terminal UI. **Later:** links to code repos and a
-reading library synced with Zotero.
+`status`, the `flow` board, `undo`, `check`, `demo`, `--json` output, and
+`tv ui` — the full-screen view of all of it.
+**Later:** links to code repos and a reading library synced with Zotero.
 
 ## Learn more
 

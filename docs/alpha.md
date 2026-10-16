@@ -55,8 +55,9 @@ Small things count: a typo in a message is worth an issue too.
 
 - **Platforms:** Linux and macOS are tested on every change. Windows isn't
   tested yet.
-- **No interactive interface yet.** Everything is commands for now; a
-  terminal UI is the next big step.
+- **A terminal UI, still young.** `tv ui` is a real interface for the same
+  content, but it is newer than the commands and changes faster; the CLI is
+  the stable one.
 - **One writer at a time.** If you use tavla on two machines, pull before you
   start and push when you're done. Changes made on both at once have to be
   merged with git by hand.

@@ -1,8 +1,10 @@
-"""Modal screens: a one-line prompt, a yes/no confirmation and the key help."""
+"""Modal screens: a one-line prompt, a picker, a yes/no confirmation, a
+read-only list, the full-screen flow board, and the key help."""
 
 from __future__ import annotations
 
-from typing import ClassVar
+from collections.abc import Callable
+from typing import Any, ClassVar
 
 from rich.table import Table
 from rich.text import Text
@@ -10,7 +12,10 @@ from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
-from textual.widgets import Input, Label, Static
+from textual.widgets import Input, Label, OptionList, Static
+from textual.widgets.option_list import Option
+
+from tavla.tui.model import Line
 
 MODAL_CSS = """
 ModalScreen { align: center middle; background: transparent; }
@@ -20,6 +25,14 @@ ModalScreen { align: center middle; background: transparent; }
 }
 #dialog Input { border: none; height: 1; padding: 0; background: $background; }
 #dialog .hint { color: $text-muted; }
+#dialog OptionList {
+    border: none; background: $background; height: auto; max-height: 60%;
+    scrollbar-size-vertical: 1;
+}
+#dialog OptionList > .option-list--option-highlighted {
+    background: $background; color: $foreground; text-style: reverse bold;
+}
+#dialog OptionList > .option-list--option-hover { background: $background; }
 """
 
 
@@ -33,14 +46,64 @@ class Prompt(ModalScreen[str | None]):
         super().__init__()
         self.question, self.value, self.hint = question, value, hint
 
+    def on_mount(self) -> None:
+        self.query_one(Input).focus()
+
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Label(Text(self.question, style="bold"))
-            yield Input(value=self.value, select_on_focus=True)
+            yield Input(value=self.value)
             yield Label(self.hint or "enter ok · esc cancel", classes="hint")
 
     def on_input_submitted(self, event: Input.Submitted) -> None:
         self.dismiss(event.value)
+
+    def action_cancel(self) -> None:
+        self.dismiss(None)
+
+
+class Picker(ModalScreen[str | None]):
+    """Choose one of ``options`` — ``(key, label)`` pairs — or Esc for None."""
+
+    DEFAULT_CSS = MODAL_CSS
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape", "cancel", "Cancel", show=False),
+        Binding("j,down", "cursor_down", show=False),
+        Binding("k,up", "cursor_up", show=False),
+        Binding("g", "first", show=False),
+        Binding("G", "last", show=False),
+    ]
+
+    def __init__(self, question: str, options: list[tuple[str, str]]) -> None:
+        super().__init__()
+        self.question, self.options = question, options
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(Text(self.question, style="bold"))
+            yield OptionList(
+                *(Option(label, id=key) for key, label in self.options),
+                id="choices",
+            )
+            yield Label("enter choose · esc cancel", classes="hint")
+
+    def on_mount(self) -> None:
+        self.query_one("#choices", OptionList).focus()
+
+    def action_cursor_down(self) -> None:
+        self.query_one("#choices", OptionList).action_cursor_down()
+
+    def action_cursor_up(self) -> None:
+        self.query_one("#choices", OptionList).action_cursor_up()
+
+    def action_first(self) -> None:
+        self.query_one("#choices", OptionList).action_first()
+
+    def action_last(self) -> None:
+        self.query_one("#choices", OptionList).action_last()
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.dismiss(str(event.option.id))
 
     def action_cancel(self) -> None:
         self.dismiss(None)
@@ -68,44 +131,193 @@ class Confirm(ModalScreen[bool]):
         self.dismiss(value)
 
 
+class ListScreen(ModalScreen[None]):
+    """A read-only, scrollable list of lines (people, warnings, notes)."""
+
+    DEFAULT_CSS = (
+        MODAL_CSS
+        + """
+    #list { width: 80; max-width: 95%; height: 80%; border: round $accent;
+            background: $background; padding: 0 1; }
+    """
+    )
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,q,enter", "close", show=False),
+        Binding("j,down", "scroll(1)", show=False),
+        Binding("k,up", "scroll(-1)", show=False),
+        Binding("ctrl+d", "scroll(10)", show=False),
+        Binding("ctrl+u", "scroll(-10)", show=False),
+    ]
+
+    def __init__(self, title: str, lines: list[Any]) -> None:
+        super().__init__()
+        self.title, self.lines = title, lines
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="list") as scroll:
+            scroll.border_title = f"{self.title} · esc to close"
+            yield Static(Table.grid() if not self.lines else _stack(self.lines))
+
+    def action_scroll(self, lines: int) -> None:
+        self.query_one("#list", VerticalScroll).scroll_relative(y=lines, animate=False)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
+def _stack(lines: list[Any]) -> Any:
+    from rich.console import Group
+
+    return Group(*lines)
+
+
+class FlowScreen(ModalScreen[str | None]):
+    """The flow board, full screen: stages, or the same cards by status.
+
+    ``f`` toggles between the two; ``enter`` on a card returns its id so the
+    app can jump into the hierarchy at that item."""
+
+    DEFAULT_CSS = (
+        MODAL_CSS
+        + """
+    #board { width: 100%; height: 100%; border: none; background: $background;
+             padding: 0 1; }
+    """
+    )
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,q", "close", show=False),
+        Binding("f", "toggle", show=False),
+        Binding("enter", "select", show=False),
+        Binding("j,down", "scroll(1)", show=False),
+        Binding("k,up", "scroll(-1)", show=False),
+        Binding("ctrl+d", "scroll(10)", show=False),
+        Binding("ctrl+u", "scroll(-10)", show=False),
+        Binding("ctrl+f", "scroll(20)", show=False),
+        Binding("ctrl+b", "scroll(-20)", show=False),
+        Binding("g", "home", show=False),
+        Binding("G", "end", show=False),
+    ]
+
+    def __init__(
+        self,
+        title: str,
+        build: dict[str, Callable[[int], list[Line]]],
+        *,
+        view: str = "stage",
+    ) -> None:
+        super().__init__()
+        self.title, self.build, self.view = title, build, view
+        self.lines: list[Line] = []
+
+    def compose(self) -> ComposeResult:
+        with VerticalScroll(id="board") as scroll:
+            scroll.border_title = self._legend()
+            yield Static(id="cards")
+
+    def _legend(self) -> str:
+        return f"{self.title} · f {'by status' if self.view == 'stage' else 'by stage'} · esc close"
+
+    def on_mount(self) -> None:
+        self.render_board()
+
+    def render_board(self) -> None:
+        width = max(self.size.width - 6, 40)
+        self.lines = self.build[self.view](width)
+        self.query_one("#cards", Static).update(_stack([line.prompt for line in self.lines]))
+        self.query_one("#board", VerticalScroll).border_title = self._legend()
+        self.query_one("#board", VerticalScroll).scroll_home(animate=False)
+
+    def action_toggle(self) -> None:
+        self.view = "status" if self.view == "stage" else "stage"
+        self.render_board()
+
+    def action_select(self) -> None:
+        """Return the card at the top of the viewport, so `enter` is predictable."""
+        scroll = self.query_one("#board", VerticalScroll)
+        top = scroll.scroll_offset.y
+        card = next((line.card for line in self.lines[top:] if line.card), None)
+        self.dismiss(card)
+
+    def action_scroll(self, lines: int) -> None:
+        self.query_one("#board", VerticalScroll).scroll_relative(y=lines, animate=False)
+
+    def action_home(self) -> None:
+        self.query_one("#board", VerticalScroll).scroll_home(animate=False)
+
+    def action_end(self) -> None:
+        self.query_one("#board", VerticalScroll).scroll_end(animate=False)
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 HELP = [
     (
-        "Moving around",
+        "Moving around (vim motions)",
         [
-            ("j k  ↑ ↓", "move in a list"),
-            ("g G", "top / bottom"),
-            ("tab  shift-tab", "next / previous pane"),
-            ("1 2 3 4  0", "status, projects, goals, tasks / detail"),
-            ("enter", "go into the next pane (or the task you are working on)"),
-            ("esc", "back out one pane, or clear a filter"),
-            ("[ ]", "Tasks pane: switch Tasks / Ideas / Deliverables"),
-            ("/", "filter the focused list"),
-            (".", "show done tasks and goals, paused projects"),
+            ("h l  ← →", "one column left / right"),
+            ("j k  ↑ ↓", "one row down / up"),
+            ("g  G", "first / last row"),
+            ("ctrl-d  ctrl-u", "half page down / up"),
+            ("ctrl-f  ctrl-b", "full page down / up"),
+            ("H  M  L", "viewport top / middle / end"),
+            ("enter", "into the next column (a task opens its preview)"),
+            ("esc", "one column back · clear the filter · leave the preview"),
+            ("tab  shift-tab", "next / previous scope"),
+            ("1 2 3 4", "project · next · inbox · agenda"),
         ],
     ),
     (
         "Changing things",
         [
-            ("space  x", "toggle done (a todo, a subtask in the detail pane)"),
+            ("space", "done"),
+            ("x", "reopen"),
             ("s", "start (mark doing)"),
-            ("w", "work on this task / pause the current session"),
-            ("n", "add a note (Updates; a log line on a project)"),
-            ("a", "add: task, goal, project, idea, todo, subtask (by pane)"),
-            ("e", "open in $EDITOR"),
+            ("w", "work on this task; again to pause"),
+            ("o  O", "add here  /  one level up (project, goal, task, idea)"),
+            ("n", "note (## Updates; a log line on a project)"),
+            ("e", "open in $EDITOR: validated and committed on return"),
+            ("t", "due date / deadline (today, +3d, fri, 2026-11-01, none)"),
             ("!", "cycle priority high → med → low"),
-            ("t", "set due date (today, +3d, fri, 2026-11-01, none)"),
-            ("p", "promote an idea to a task"),
-            ("D", "drop (asks first)"),
-            ("u", "undo the last change (asks first)"),
+            ("m", "move to another project or goal"),
+            ("p", "promote an idea to a task (inbox)"),
+            ("D", "drop (asks first; refused while other tasks depend on it)"),
+            ("u", "undo the last change (asks, and names it)"),
+            ("J  K", "move the row down / up (writes `order:`)"),
+            ("a  A", "add / remove an `after` dependency (picked from the list)"),
+            ("@a  @d  @m  @l", "people: add · remove · mail · list"),
         ],
     ),
     (
-        "App",
+        "Seeing",
         [
+            ("v", "mark a row; j/k extend, space and friends then act on all marks"),
+            ("V", "mark the whole column · with nothing marked: show done and paused"),
+            ("/", "filter every column at once (esc clears)"),
+            ("f", "flow board, full screen (f again: by status, enter: jump to a card)"),
+            ("P", "pick the project"),
             ("r", "reload now (it also reloads when the repo changes)"),
-            ("ctrl-p", "command palette (themes, ...)"),
-            ("?", "this help"),
-            ("q  ctrl-c", "quit"),
+            ("ctrl-p", "command palette (themes, …)"),
+            ("?  q  ctrl-c", "this help · quit"),
+        ],
+    ),
+    (
+        "Deliberate departures from vim",
+        [
+            ("space", "done — not the leader key"),
+            ("w", "work on the task — vim: next word"),
+            ("n", "note — vim: next match"),
+            ("x", "reopen — vim: delete a character"),
+            ("g", "top of the row list — vim says gg, but Textual has no key chords"),
+            ("P", "pick the project — vim: paste before the cursor"),
+        ],
+    ),
+    (
+        "How changes are recorded",
+        [
+            ("", "Each marked row is its own commit, so `u` takes bulk changes"),
+            ("", "back one item at a time; everything else is one commit."),
+            ("", "Only `D`, `u`, and a verb over more than three marked rows ask."),
         ],
     ),
 ]
@@ -115,7 +327,7 @@ class Help(ModalScreen[None]):
     DEFAULT_CSS = (
         MODAL_CSS
         + """
-    #help { width: 76; max-width: 95%; height: 90%; border: round $accent;
+    #help { width: 84; max-width: 95%; height: 90%; border: round $accent;
             background: $background; padding: 0 1; }
     """
     )

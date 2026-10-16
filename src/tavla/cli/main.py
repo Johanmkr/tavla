@@ -139,10 +139,16 @@ def main(
 )
 @handles_errors
 def ui(ctx: typer.Context, content_dir: ContentDirOpt = None) -> None:
-    """Open the full-screen view: projects, goals, tasks and their detail.
+    """Open the full-screen view: columns of projects, goals, tasks, preview.
 
-    It reloads by itself when anything changes the content repo (the CLI in
-    another shell, `tv undo`, ...). Press ? inside for the keys.
+    `1`-`4` switch scope: a project (`PROJECT | GOAL | TASK` and the item's
+    detail on the right), `next`, the inbox and the agenda. `j`/`k` move,
+    `enter`/`l` go a column deeper, `esc` comes back; single keys mark things
+    done, start work, add, edit in $EDITOR, move, reorder with `J`/`K`, edit
+    dependencies with `a`/`A`, mark several rows with `v`, and handle people
+    with `@`. Each change is validated and committed like the CLI's, so `u`
+    (and `tv undo`) takes it back. It reloads by itself whenever the content
+    repo changes. Press `?` inside for the whole key map.
     """
     content = state(ctx, content_dir=content_dir).content()
     from tavla.tui.app import run  # Textual is only imported when needed
@@ -184,6 +190,8 @@ def migrate_(
 
     v1 -> v2: each task becomes a goal (tasks/ -> goals/), and each of its
     subtask checkboxes becomes a task under that goal.
+    v2 -> v3: nothing to rewrite; v3 just allows an `order:` line on tasks, so
+    only the recorded layout version changes.
     """
     st = state(ctx, content_dir=content_dir)
     plan = migrate.plan(st.content_dir)

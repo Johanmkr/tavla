@@ -124,3 +124,15 @@ def mailto(people: Iterable[Person], subject: str = "") -> str:
     if not to:
         raise ValidationError("no one here has an email address")
     return f"mailto:{to}" + (f"?subject={quote(subject)}" if subject else "")
+
+
+def open_mailto(url: str) -> bool:
+    """Hand ``url`` to the desktop's mail program. False if nothing opened it.
+
+    The one place that launches it, so ``tv task mail`` and the TUI behave the
+    same. ``typer`` is imported here rather than at module level: the core
+    library stays usable without the CLI framework.
+    """
+    import typer
+
+    return typer.launch(url) == 0

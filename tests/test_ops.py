@@ -4,7 +4,7 @@ import datetime as dt
 
 import pytest
 
-from tavla.core import ops, parsing
+from tavla.core import ops, parsing, queries
 from tavla.core.entities import DeliverableKind, Priority, ProjectStatus, TaskStatus
 from tavla.core.errors import AmbiguousIdError, GitError, NotFoundError, ValidationError
 from tavla.core.store import Content
@@ -661,3 +661,109 @@ def test_set_deliverable_fields_rejects_invalid_status(content):
     with pytest.raises(ValidationError, match="invalid status"):
         ops.set_deliverable_fields(content, d, {"status": "rejected-forever"})
     assert d.path.read_text() == original
+
+
+# --- display order -------------------------------------------------------------
+
+
+def test_reorder_numbers_the_whole_list_in_one_commit(content, git):
+    goal = content.goal("write-intro")
+    tasks = [content.task("get-feedback-from-advisor"), content.task("draft-related-work")]
+    assert ops.reorder(content, tasks) == 2
+    assert _subjects(git, content.root)[0] == "task: reorder in write-intro (2 tasks)"
+    ordered = [content.task("get-feedback-from-advisor"), content.task("draft-related-work")]
+    assert [t.order for t in ordered] == [0, 1]
+    # `updated` is left alone: arranging a list is not work on the task.
+    assert content.task("draft-related-work").updated == dt.date(2026, 9, 20)
+    # and the order the CLI and the TUI sort by now follows it
+    assert [t.id for t in sorted(content.goal_tasks(goal), key=queries.order_key)][:2] == [
+        "get-feedback-from-advisor",
+        "draft-related-work",
+    ]
+
+
+def test_reorder_of_an_already_ordered_list_is_a_no_op(content, git):
+    first = [content.task("draft-related-work"), content.task("get-feedback-from-advisor")]
+    assert ops.reorder(content, first) == 2
+    before = _subjects(git, content.root)[0]
+    again = [content.task("draft-related-work"), content.task("get-feedback-from-advisor")]
+    assert ops.reorder(content, again) == 0
+    assert _subjects(git, content.root)[0] == before
+    assert ops.reorder(content, []) == 0
+
+
+def test_reorder_subtasks_permutes_the_checkbox_lines(content, git):
+    task = content.task("draft-related-work")
+    assert [s.text for s in task.subtasks] == ["Collect MCMC papers", "Write two paragraphs"]
+    edited = ops.reorder_subtasks(content, task, [2, 1])
+    assert [s.text for s in edited.subtasks] == ["Write two paragraphs", "Collect MCMC papers"]
+    assert [s.done for s in edited.subtasks] == [False, True]  # a tick travels with its line
+    assert _subjects(git, content.root)[0] == "task: edit draft-related-work (subtasks reordered)"
+
+
+def test_reorder_subtasks_needs_every_number_once(content):
+    task = content.task("draft-related-work")
+    with pytest.raises(ValidationError, match="every subtask exactly once"):
+        ops.reorder_subtasks(content, task, [1])
+
+
+# --- dependency edges ----------------------------------------------------------
+
+
+def test_add_and_remove_dep(content, git):
+    task = content.task("fix-plot-colors")  # loose, no dependencies
+    edited = ops.add_dep(content, task, content.task("draft-related-work"))
+    assert edited.depends_on == ["draft-related-work"]
+    assert _subjects(git, content.root)[0] == "task: edit fix-plot-colors (depends_on)"
+    assert ops.add_dep(content, edited, content.task("draft-related-work")) is None  # there already
+    back = ops.remove_dep(content, edited, content.task("draft-related-work"))
+    assert back.depends_on == []
+    assert ops.remove_dep(content, back, content.task("draft-related-work")) is None
+
+
+def test_add_dep_refuses_a_cycle_and_leaves_the_file(content):
+    # get-feedback-from-advisor already waits on draft-related-work, so the
+    # reverse edge would close a cycle.
+    task = content.task("draft-related-work")
+    before = task.path.read_text()
+    with pytest.raises(ValidationError, match="dependency cycle"):
+        ops.add_dep(content, task, content.task("get-feedback-from-advisor"))
+    assert task.path.read_text() == before
+
+
+# --- moving --------------------------------------------------------------------
+
+
+def test_move_item_to_another_project_moves_the_file(content, git):
+    task = content.task("fix-plot-colors")  # loose in project-a
+    moved = ops.move_item(content, task, content.project("project-b"))
+    assert moved.project == "project-b"
+    assert moved.path == content.root / "projects/project-b/tasks/fix-plot-colors.md"
+    assert _subjects(git, content.root)[0] == "task: move fix-plot-colors -> project project-b"
+    assert not (content.root / "projects/project-a/tasks/fix-plot-colors.md").exists()
+
+
+def test_move_item_into_a_goal_in_the_same_project(content, git):
+    task = content.task("fix-plot-colors")
+    goal = content.goal("write-intro")
+    moved = ops.move_item(content, task, content.project("project-a"), goal=goal)
+    assert (moved.project, moved.goal) == ("project-a", "write-intro")
+    assert _subjects(git, content.root)[0] == "task: move fix-plot-colors"
+    assert ops.move_item(content, moved, content.project("project-a"), goal=goal) is None
+
+
+def test_move_item_to_another_project_detaches_the_goal(content):
+    # A goal lives in one project, so moving a task elsewhere without naming a
+    # goal there drops the goal pointer — what the TUI offers as
+    # "→ project X (no goal)".
+    task = content.task("draft-related-work")  # goal write-intro, project-a
+    moved = ops.move_item(content, task, content.project("project-b"))
+    assert (moved.project, moved.goal) == ("project-b", None)
+
+
+def test_move_a_goal_takes_its_tasks(content, git):
+    goal = content.goal("write-intro")
+    moved = ops.move_item(content, goal, content.project("project-b"))
+    assert moved.project == "project-b"
+    assert {t.project for t in content.goal_tasks(moved)} == {"project-b"}
+    assert _subjects(git, content.root)[0] == "goal: move write-intro -> project project-b"
