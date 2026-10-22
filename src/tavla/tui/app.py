@@ -68,6 +68,7 @@ MIN_SIZE = (40, 12)
 WIDE = 100
 LIST_MIN = 20  # narrowest a navigation column may get
 PREVIEW_MIN = 34
+GOALS_MAX = 34  # the goal column next to the tasks: goal titles are short
 
 SCOPES = ("project", "next", "inbox", "agenda")
 SCOPE_KEYS = {"1": "project", "2": "next", "3": "inbox", "4": "agenda"}
@@ -412,8 +413,8 @@ class TavlaApp(App[None]):
         return [n for n in self.column_names() if n not in dropped]
 
     def layout(self, width: int) -> dict[str, int]:
-        """Column widths. The preview keeps ``max(34, width//3)``; the list
-        columns share the rest, ``width: 1fr``-style."""
+        """Column widths. The preview, the pane you read, gets two fifths
+        (at least 34); with two list columns the first (goals) stays narrow."""
         names = self.visible_columns()
         lists = [n for n in names if n != "preview"]
         if not names:
@@ -421,11 +422,14 @@ class TavlaApp(App[None]):
         room = max(width - 2, MIN_SIZE[0])
         if not lists:
             return {"preview": room}
-        preview = max(PREVIEW_MIN, room // 3) if "preview" in names else 0
+        preview = max(PREVIEW_MIN, room * 2 // 5) if "preview" in names else 0
         preview = min(preview, max(room - LIST_MIN * len(lists), LIST_MIN))
         rest = room - preview
-        widths = {n: rest // len(lists) for n in lists}
-        if lists:
+        if len(lists) == 2:
+            first = max(LIST_MIN, min(GOALS_MAX, rest * 9 // 20))
+            widths = {lists[0]: first, lists[1]: rest - first}
+        else:
+            widths = {n: rest // len(lists) for n in lists}
             widths[lists[-1]] += rest - sum(widths.values())
         if preview:
             widths["preview"] = preview

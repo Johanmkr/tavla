@@ -603,7 +603,15 @@ def _body_sections(body: str, skip: Iterable[str]) -> list[Line]:
 def _people_line(people: list) -> list[Line]:
     if not people:
         return []
-    return _lines(Text.assemble(dim("people  "), ", ".join(str(p) for p in people)))
+    return [field("people", ", ".join(str(p) for p in people))]
+
+
+LABEL = 10  # width of the labels in front of a detail field
+
+
+def field(label: str, *parts: Text | str) -> Line:
+    """``priority  med  (from goal)``: a dim label, then the value."""
+    return Line(Text.assemble(dim(f"{label:<{LABEL}}"), *parts))
 
 
 def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None) -> list[Line]:
@@ -614,20 +622,20 @@ def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None)
         Text.assemble(marker(state), " ", (task.title, "bold")),
         dim(f"{task.id} · {task.project}" + (f" · goal {task.goal}" if task.goal else "")),
     )
-    facts = Text()
-    facts.append(task.priority.value, style="bold" if task.priority.value == "high" else "")
-    if "priority" in task.inherited:
-        facts.append(" (goal)", style="dim")
-    facts.append(f" · {task.status.value} · ")
-    overdue = task.due is not None and task.due < today and task.status != TaskStatus.DONE
-    facts.append(long_due(task.due, today), style="bold red" if overdue else "")
-    if "due" in task.inherited:
-        facts.append(" (goal)", style="dim")
-    lines.append(Line(facts))
+    from_goal = dim("  (from goal)")
+    priority = Text(task.priority.value, style="bold" if task.priority.value == "high" else "")
+    lines.append(field("priority", priority, from_goal if "priority" in task.inherited else ""))
+    lines.append(field("status", task.status.value))
+    if task.due is not None:
+        overdue = task.due < today and task.status != TaskStatus.DONE
+        due = Text(
+            long_due(task.due, today).removeprefix("due "), style="bold red" if overdue else ""
+        )
+        lines.append(field("due", due, from_goal if "due" in task.inherited else ""))
 
     status_by_id = {t.id: t for t in content.tasks()}
     if task.depends_on:
-        after = Text("after   ", style="dim")
+        after = Text(f"{'after':<{LABEL}}", style="dim")
         for n, d in enumerate(task.depends_on):
             dep = status_by_id.get(d)
             st = task_state(dep) if dep else CardState.MISSING
@@ -635,10 +643,10 @@ def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None)
         lines.append(Line(after))
     blocks = [t.id for t in content.tasks() if task.id in t.depends_on]
     if blocks:
-        lines.append(Line(Text.assemble(dim("blocks  "), ", ".join(blocks))))
+        lines.append(field("blocks", ", ".join(blocks)))
     lines += _people_line(task.everyone)
     if task.tags:
-        lines.append(Line(Text.assemble(dim("tags    "), " ".join(f"#{t}" for t in task.tags))))
+        lines.append(field("tags", " ".join(f"#{t}" for t in task.tags)))
 
     if task.subtasks:
         lines.append(Line(Text("")))

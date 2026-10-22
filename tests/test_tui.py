@@ -153,6 +153,24 @@ def test_task_without_subtasks_says_what_to_do(demo_repo):
     )
 
 
+def test_task_detail_labels_its_fields(demo_repo):
+    content = Content.open(demo_repo)
+    text = plain(model.task_detail(content, content.task("grade-problems")))
+    assert "priority  med  (from goal)" in text
+    assert "status    doing" in text
+
+
+def test_preview_is_the_widest_column_and_goals_stay_narrow(demo_repo):
+    seen: dict[str, Any] = {}
+
+    def grab(app):
+        seen.update(app.layout(120))
+
+    drive(demo_repo, grab)
+    assert seen["preview"] > seen["mid"] > seen["list"]
+    assert seen["list"] <= 34
+
+
 def test_marking_a_row_survives_a_two_column_grid():
     row = model.Row("k", "task", model.two_columns(model.dim("hello"), model.dim("2")))
     row.mark()
