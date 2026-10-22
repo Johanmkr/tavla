@@ -24,9 +24,12 @@ runner = CliRunner()
 
 
 @pytest.fixture
-def demo_repo(tmp_path) -> Path:
+def demo_repo(tmp_path, git) -> Path:
+    """The demo, without its todo list, so tests add the chores they need."""
     dest = tmp_path / "demo"
     demo.create(dest)
+    (dest / todos.TODO_FILE).unlink()
+    git(dest, "commit", "-qam", "test: no todos")
     return dest
 
 

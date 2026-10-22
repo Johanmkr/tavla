@@ -2,6 +2,7 @@
 id: draft-results
 project: thesis
 goal: write-up
+order: 1
 status: todo
 depends_on: [make-figures]
 due: 2026-10-15

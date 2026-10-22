@@ -2,6 +2,7 @@
 id: draft-methods
 project: thesis
 goal: write-up
+order: 0
 status: todo
 depends_on: [set-up-pipeline]
 tags: []

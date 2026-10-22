@@ -4,6 +4,9 @@ project: teaching
 status: doing
 priority: med
 tags: []
+people:
+  - name: Ola Nordmann
+    email: ola.nordmann@example.org
 created: 2026-09-24
 updated: 2026-09-27
 due: 2026-10-03

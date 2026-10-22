@@ -15,9 +15,12 @@ from tavla.core.store import Content
 
 
 @pytest.fixture
-def repo(tmp_path) -> Path:
+def repo(tmp_path, git) -> Path:
+    """The demo with two chores of our own instead of its todo list."""
     root = tmp_path / "demo"
     demo.create(root)
+    (root / todos.TODO_FILE).unlink()
+    git(root, "commit", "-qam", "test: no todos")
     content = Content.open(root)
     todos.add(content, "Book the dentist")
     todos.add(content, "Draft the methods intro #writing")
