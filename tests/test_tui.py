@@ -54,6 +54,25 @@ def test_hints_keep_context_keys_and_drop_extras_first():
     assert fit("", ["v mark"], 30) == "v mark  ? help"
 
 
+def test_help_splits_hints_into_keys_and_actions():
+    from tavla.tui.screens import _split_hint
+
+    assert _split_hint("J K order")[::2] == ("J K", "order")
+    assert _split_hint("space done")[::2] == ("space", "done")
+    assert _split_hint("enter go to item")[::2] == ("enter", "go to item")
+    assert _split_hint("/ filter")[::2] == ("/", "filter")
+
+
+def test_help_starts_with_the_keys_for_where_you_are(demo_repo):
+    seen: dict[str, Any] = {}
+
+    def grab(app):
+        seen["here"] = app.screen.here
+
+    drive(demo_repo, "question_mark", grab, "G", "g")
+    assert seen["here"].startswith("enter tasks")
+
+
 def test_goal_column_ends_with_deliverables_and_loose(demo_repo):
     content = Content.open(demo_repo)
     rows = model.goal_column_rows(content, content.project("thesis"), today=demo.ANCHOR)

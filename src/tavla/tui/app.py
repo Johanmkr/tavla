@@ -324,6 +324,7 @@ class TavlaApp(App[None]):
         self.marked: set[str] = set()
         self.visual = False
         self.pending_key: str | None = None  # `g` (before gg) and `@` (before @a)
+        self.here_hints = ""  # the context half of the hint line, for `?`
         self.head: str | None = None
         self.loaded_at = time.monotonic()
         self.status_at = 0.0
@@ -793,6 +794,7 @@ class TavlaApp(App[None]):
             hints = "@a add  @d remove  @m mail  @l list  esc cancel"
         elif self.marked or self.visual:
             hints = MARK_HINT + hints
+        self.here_hints = hints
         bar = self.query_one("#hints", Static)
         width = (bar.size.width or self.size.width) - 2
         bar.update(Text(model.fit_hints(hints, COMMON_HINTS, width), style="dim"))
@@ -1886,7 +1888,7 @@ class TavlaApp(App[None]):
         self.pick("Project", options, pick)
 
     def action_help(self) -> None:
-        self.push_screen(Help())
+        self.push_screen(Help(self.here_hints))
 
     def action_reload(self) -> None:
         self.head = self.git_head()

@@ -340,6 +340,19 @@ HELP = [
 ]
 
 
+def _split_hint(hint: str) -> tuple[str, str, str]:
+    """``J K order`` -> ``("J K", " ", "order")``: the keys are the leading
+    words that aren't plain lowercase words (``space`` and ``esc`` count as keys)."""
+    words = hint.split()
+    n = 0
+    while n < len(words) - 1 and (
+        len(words[n]) == 1 or words[n] in ("space", "esc", "enter", "tab") or not words[n].isalpha()
+    ):
+        n += 1
+    n = max(n, 1)
+    return " ".join(words[:n]), " ", " ".join(words[n:])
+
+
 class Help(ModalScreen[None]):
     DEFAULT_CSS = (
         MODAL_CSS
@@ -352,12 +365,29 @@ class Help(ModalScreen[None]):
         Binding("escape,q,question_mark,enter", "close", show=False),
         Binding("j,down", "scroll(1)", show=False),
         Binding("k,up", "scroll(-1)", show=False),
+        Binding("ctrl+d", "page(0.5)", show=False),
+        Binding("ctrl+u", "page(-0.5)", show=False),
+        Binding("ctrl+f,pagedown,space", "page(1)", show=False),
+        Binding("ctrl+b,pageup", "page(-1)", show=False),
+        Binding("g,home", "edge(False)", show=False),
+        Binding("G,end", "edge(True)", show=False),
     ]
+
+    def __init__(self, here: str = "") -> None:
+        super().__init__()
+        self.here = here  # the hint line where `?` was pressed
 
     def compose(self) -> ComposeResult:
         grid = Table.grid(padding=(0, 2))
         grid.add_column(no_wrap=True, style="bold")
         grid.add_column()
+        if self.here:
+            grid.add_row(Text("Where you are", style="bold underline"), "")
+            for hint in self.here.split("  "):
+                if hint.strip():
+                    keys, _, what = _split_hint(hint.strip())
+                    grid.add_row(keys, what)
+            grid.add_row("", "")
         for title, rows in HELP:
             grid.add_row(Text(title, style="bold underline"), "")
             for keys, what in rows:
@@ -369,6 +399,14 @@ class Help(ModalScreen[None]):
 
     def action_scroll(self, lines: int) -> None:
         self.query_one("#help", VerticalScroll).scroll_relative(y=lines, animate=False)
+
+    def action_page(self, pages: float) -> None:
+        scroll = self.query_one("#help", VerticalScroll)
+        scroll.scroll_relative(y=int(scroll.size.height * pages), animate=False)
+
+    def action_edge(self, end: bool) -> None:
+        scroll = self.query_one("#help", VerticalScroll)
+        scroll.scroll_end(animate=False) if end else scroll.scroll_home(animate=False)
 
     def action_close(self) -> None:
         self.dismiss(None)
