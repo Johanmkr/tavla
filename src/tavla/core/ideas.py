@@ -112,7 +112,7 @@ def resolve(content: Content, ref: str) -> IdeaRef:
 _FILE_HEADERS = {INBOX: "# Inbox\n\n", "project": "# Ideas\n\n"}
 
 
-def _insert(scope: Scope, text: str) -> None:
+def insert(scope: Scope, text: str) -> None:
     if scope.in_section:
         scope.path.write_text(
             parsing.append_to_section(scope.path.read_text(), IDEAS_HEADING, f"- {text}")
@@ -121,7 +121,7 @@ def _insert(scope: Scope, text: str) -> None:
         ops.append_line(scope.path, f"- {text}", _FILE_HEADERS[scope.kind])
 
 
-def _delete(ref: IdeaRef) -> None:
+def remove(ref: IdeaRef) -> None:
     ref.scope.path.write_text(parsing.remove_line(ref.scope.path.read_text(), ref.line))
 
 
@@ -129,7 +129,7 @@ def add(content: Content, scope: Scope, text: str) -> str:
     """Append an idea to ``scope`` and commit. Returns the normalized line."""
     git_sync.require_repo(content.root)
     line = ops.one_line(text, "idea")
-    _insert(scope, line)
+    insert(scope, line)
     message = (
         f"inbox: capture {ops.summary(line)}"
         if scope.kind == INBOX
@@ -143,8 +143,8 @@ def move(content: Content, ref: IdeaRef, target: Scope) -> None:
     if target.path == ref.scope.path:
         raise ValidationError(f"idea is already in {target.label}")
     git_sync.require_repo(content.root)
-    _delete(ref)
-    _insert(target, ref.idea.text)
+    remove(ref)
+    insert(target, ref.idea.text)
     git_sync.commit(
         content.root,
         f"idea: move {ref.scope.label} -> {target.label}: {ops.summary(ref.idea.text)}",
@@ -156,7 +156,7 @@ def drop(content: Content, ref: IdeaRef, *, done: bool = False) -> None:
     """Delete an idea; ``done`` says in the commit that it was done, not
     abandoned."""
     git_sync.require_repo(content.root)
-    _delete(ref)
+    remove(ref)
     verb = "done" if done else "drop from"
     git_sync.commit(
         content.root,
@@ -179,7 +179,7 @@ def promote(
     title = ref.idea.text_without_tags() or ref.idea.text
     tags = ref.idea.tags
     original = ref.scope.path.read_text()
-    _delete(ref)
+    remove(ref)
     try:
         if as_goal:
             if project is None:

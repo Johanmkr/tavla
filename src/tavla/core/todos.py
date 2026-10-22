@@ -110,7 +110,7 @@ def set_done(content: Content, todos: Iterable[Todo], *, done: bool = True) -> l
     return changed
 
 
-def _remove(content: Content, todos: Iterable[Todo]) -> None:
+def remove(content: Content, todos: Iterable[Todo]) -> None:
     path = todo_path(content)
     text = path.read_text()
     for t in sorted(todos, key=lambda t: t.line, reverse=True):
@@ -121,7 +121,7 @@ def _remove(content: Content, todos: Iterable[Todo]) -> None:
 def drop(content: Content, todos: list[Todo]) -> None:
     """Delete todos (they stay in git history)."""
     git_sync.require_repo(content.root)
-    _remove(content, todos)
+    remove(content, todos)
     git_sync.commit(content.root, f"todo: drop {_what(todos)}", [todo_path(content)])
 
 
@@ -130,7 +130,7 @@ def clear(content: Content) -> list[Todo]:
     git_sync.require_repo(content.root)
     finished = [t for t in read(content) if t.done]
     if finished:
-        _remove(content, finished)
+        remove(content, finished)
         git_sync.commit(content.root, f"todo: clear {len(finished)} done", [todo_path(content)])
     return finished
 
@@ -150,7 +150,7 @@ def promote(
     title = idea.text_without_tags() or todo.text
     path = todo_path(content)
     original = path.read_text()
-    _remove(content, [todo])
+    remove(content, [todo])
     try:
         if as_goal:
             if project is None:

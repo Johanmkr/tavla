@@ -189,6 +189,7 @@ def add_project(
     tags: Iterable[str] = (),
     parent: Project | None = None,
     today: dt.date | None = None,
+    extra_paths: Iterable[Path] = (),
 ) -> Project:
     """Create a project, or a subproject of ``parent``."""
     git_sync.require_repo(content.root)
@@ -218,7 +219,9 @@ def add_project(
     content.refresh()
     registry = sync_registry(content)
     where = f" under {parent.id}" if parent else ""
-    git_sync.commit(content.root, f"project: add {project_id}{where}", [directory, registry])
+    git_sync.commit(
+        content.root, f"project: add {project_id}{where}", [directory, registry, *extra_paths]
+    )
     return content.project(project_id)
 
 
@@ -1111,7 +1114,14 @@ def check_subtasks(
     return _fresh(content, task)
 
 
-def add_subtask(content: Content, task: Task, text: str, *, today: dt.date | None = None) -> Task:
+def add_subtask(
+    content: Content,
+    task: Task,
+    text: str,
+    *,
+    today: dt.date | None = None,
+    extra_paths: Iterable[Path] = (),
+) -> Task:
     """Append an unchecked ``- [ ] text`` item to the task's ``## Subtasks``."""
     git_sync.require_repo(content.root)
     line = one_line(text, "subtask")
@@ -1119,7 +1129,9 @@ def add_subtask(content: Content, task: Task, text: str, *, today: dt.date | Non
     body = ensure_section(body, SUBTASKS_HEADING, before=(IDEAS_HEADING, UPDATES_HEADING))
     body = append_to_section(body, SUBTASKS_HEADING, f"- [ ] {line}")
     task.path.write_text(set_frontmatter_key(body, "updated", today or dates.local_today()))
-    git_sync.commit(content.root, f"task: subtask {task.id}: {summary(line)}", [task.path])
+    git_sync.commit(
+        content.root, f"task: subtask {task.id}: {summary(line)}", [task.path, *extra_paths]
+    )
     return _fresh(content, task)
 
 

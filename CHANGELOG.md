@@ -78,6 +78,9 @@ once (see Upgrading).
 - In the inbox of `tavla ui`, `D` drops ideas, `space` removes an idea that is
   already done, `p` promotes chores as well as ideas, and the promote picker
   lists each project's goals under it.
+- `T` in `tavla ui` triages the inbox: chores, then ideas, one at a time, and
+  one key turns each into a task, goal, project or subtask, files it under a
+  project or goal for later, marks it done or drops it.
 - `tavla ui` lists a project's subprojects at the top of its goal column:
   `enter` opens one, `h` goes back to the parent, and the breadcrumb shows
   the parents.

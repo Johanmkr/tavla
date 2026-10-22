@@ -38,6 +38,7 @@ from tavla.core import (
     git_sync,
     history,
     ideas,
+    inbox,
     ops,
     people,
     queries,
@@ -58,7 +59,16 @@ from tavla.core.ops import EditSession
 from tavla.core.store import Content
 from tavla.tui import model
 from tavla.tui.model import Context, Row
-from tavla.tui.screens import BarList, Confirm, FlowScreen, Help, ListScreen, Picker, Prompt
+from tavla.tui.screens import (
+    BarList,
+    Confirm,
+    FlowScreen,
+    Help,
+    ListScreen,
+    Picker,
+    Prompt,
+    Triage,
+)
 
 POLL_SECONDS = 2.0
 STATUS_EVERY = 30.0  # refresh the work timer and alerts this often
@@ -86,7 +96,7 @@ HINTS = {
     ("project", "preview"): "space tick  o subtask  e edit  w work  W terminal  n note  esc back",
     ("next", "list"): "space done  s start  w work  W terminal  enter open  e edit  t due",
     ("next", "preview"): "space tick  o subtask  e edit  W terminal  n note  esc back",
-    ("inbox", "list"): "p promote  space done  D drop  o add  e edit file",
+    ("inbox", "list"): "T triage  p promote  space done  D drop  o add  e edit file",
     ("inbox", "preview"): "space tick  o subtask  D drop  esc back",
     ("agenda", "list"): "enter go to item  space done  w work  o todo  / filter",
     ("agenda", "preview"): "space tick  o subtask  e edit  esc back",
@@ -310,6 +320,7 @@ class TavlaApp(App[None]):
         Binding("A", "dep_edge(False)", show=False),
         Binding("at", "people", show=False),
         Binding("P", "pick_project", show=False),
+        Binding("T", "triage", show=False),
         Binding("f", "flow", show=False),
         Binding("slash", "filter", show=False),
         Binding("r", "reload", show=False),
@@ -333,6 +344,7 @@ class TavlaApp(App[None]):
         self.loaded_at = time.monotonic()
         self.status_at = 0.0
         self.pending: dict[str, str] = {}
+        self.triage_last: dict[str, str] = {}  # triage action -> where it last went
         self.pending_at: dict[str, int] = {}
         self.write_lock = threading.Lock()
 
@@ -1070,11 +1082,13 @@ class TavlaApp(App[None]):
                 message = result.message
             self.head = self.git_head()
             self.reload()
+            self.reload_triage()
             if message:
                 self.notify(message, timeout=4)
         elif worker.state == WorkerState.ERROR:
             self.show_error(worker.error)
             self.reload()
+            self.reload_triage()
 
     def show_error(self, error: BaseException | None) -> None:
         if isinstance(error, TavlaError):
@@ -1931,10 +1945,15 @@ class TavlaApp(App[None]):
             self.column("list").focus()
 
     def action_pick_project(self) -> None:
-        projects = self.content.projects()
-        if not projects:
+        if not self.content.projects():
             self.nothing("No projects yet")
             return
+        self.pick("Project", self.project_options(), self.open_project)
+
+    def project_options(self, prefix: str = "") -> list[tuple[str, str, str]]:
+        """Every project for a picker, subprojects indented under their parent
+        (and found by typing the parent's id)."""
+        projects = self.content.projects()
         parents = {p.id: p.parent for p in projects}
 
         def ancestors(project_id: str) -> list[str]:
@@ -1943,20 +1962,98 @@ class TavlaApp(App[None]):
                 out.append(project_id)
             return out
 
-        # Subprojects indent under their parent, and typing the parent's id
-        # finds them too.
-        options = [
+        return [
             (
                 p.id,
                 "  " * len(ancestors(p.id))
-                + f"{p.id}  ({p.title})"
+                + f"{prefix}{p.id}  ({p.title})"
                 + (f" {model.PROJECT_MARKS[p.status]}" if model.PROJECT_MARKS[p.status] else ""),
                 " ".join(ancestors(p.id)),
             )
             for p in projects
         ]
 
-        self.pick("Project", options, self.open_project)
+    # --- triage ------------------------------------------------------------------
+
+    def action_triage(self) -> None:
+        """Go through the inbox one item at a time: the kind under the cursor
+        first (chores or ideas), else whichever has items."""
+        row = self.target() if self.scope == "inbox" else None
+        counts = inbox.counts(self.content)
+        kind = {"todo": "todo", "idea": "idea", "filed": "filed"}.get(row.kind if row else "")
+        if row is not None and row.key == "heading:chores":
+            kind = "todo"
+        elif row is not None and row.key == "heading:ideas":
+            kind = "idea"
+        if kind is None:
+            kind = next((k for k in ("todo", "idea") if counts[k]), "todo")
+        self.push_screen(Triage(self.root, kind, self.triage_decide))
+
+    def reload_triage(self) -> None:
+        for screen in self.screen_stack:
+            if isinstance(screen, Triage):
+                screen.load()
+
+    def triage_options(self, action: str) -> list[tuple[str, str, str]]:
+        """Where ``action`` can put an item, the last place used first."""
+        content = self.content
+        if action == "task":
+            options = model.task_homes(content)
+        elif action == "goal":
+            options = self.project_options()
+        elif action == "project":
+            options = [("-", "a new top-level project", ""), *self.project_options("under ")]
+        elif action == "subtask":
+            options = [
+                (t.id, f"{t.project} › {t.title}", t.goal or "")
+                for t in content.tasks()
+                if t.status != TaskStatus.DONE
+            ]
+        else:  # later: a project's or goal's ideas
+            options = self.project_options()
+            options += [
+                (g.id, f"{g.project} › {g.title}  (goal)", g.id)
+                for g in content.goals()
+                if g.status != TaskStatus.DONE
+            ]
+        last = self.triage_last.get(action)
+        return sorted(options, key=lambda o: o[0] != last)
+
+    def triage_decide(self, screen: Triage, action: str, item: inbox.Item) -> None:
+        """Ask what is needed for ``action`` on ``item``, then write it."""
+
+        def run(job: Callable[[Content, inbox.Item], str]) -> None:
+            screen.busy = True
+            self.write(lambda c: Outcome(job(c, item)))
+
+        if action == "finish":
+            run(lambda c, i: (inbox.finish(c, i), f"Done: {i.text}")[1])
+            return
+        if action == "drop":
+            run(lambda c, i: (inbox.drop(c, i), f"Dropped: {i.text} (u undoes)")[1])
+            return
+        questions = {
+            "task": "New task in",
+            "goal": "New goal in",
+            "project": "New project",
+            "subtask": "New subtask of",
+            "later": "Keep it for later under",
+        }
+
+        def chosen(where: str) -> None:
+            self.triage_last[action] = where
+            if action == "later":
+                run(lambda c, i: _file_under(c, i, where))
+                return
+            self.ask(
+                f"{action.capitalize()} title",
+                lambda title: run(lambda c, i: _make(c, i, action, where, title)),
+                value=item.title,
+                hint="enter ok · esc cancel"
+                + (f" · tags: {' '.join(item.tags)}" if item.tags else ""),
+            )
+
+        self.pick(questions[action], self.triage_options(action), chosen)
 
     def open_project(self, project_id: str, select: str | None = None) -> None:
         """Show ``project_id`` in the project scope, the cursor on ``select``
@@ -2258,6 +2355,31 @@ def _fresh_idea(c: Content, ref: ideas.IdeaRef) -> ideas.IdeaRef:
         if r.idea.text == ref.idea.text:
             return r
     raise ValidationError(f"the ideas in {ref.scope.label} changed on disk; try again")
+
+
+def _make(c: Content, item: inbox.Item, action: str, where: str, title: str) -> str:
+    """Turn ``item`` into a task, goal, project or subtask at ``where`` (a
+    triage picker key)."""
+    if action == "task":
+        project_id, goal_id = where.split("|", 1)
+        goal = c.goal(goal_id) if goal_id else None
+        task = inbox.to_task(c, item, title, project=c.project(project_id), goal=goal)
+        return f"Task {task.id} in {goal_id or project_id}"
+    if action == "goal":
+        goal = inbox.to_goal(c, item, title, c.project(where))
+        return f"Goal {goal.id} in {where}"
+    if action == "project":
+        parent = None if where == "-" else c.project(where)
+        project = inbox.to_project(c, item, title, parent)
+        return f"Project {project.id}" + (f" under {where}" if parent else "")
+    task = inbox.to_subtask(c, item, title, c.task(where))
+    return f"Subtask of {task.id}"
+
+
+def _file_under(c: Content, item: inbox.Item, where: str) -> str:
+    scope = ideas.resolve_scope(c, where)
+    inbox.file_under(c, item, scope)
+    return f"Filed under {scope.label}: {item.text}"
 
 
 def _text(row: Row) -> str:

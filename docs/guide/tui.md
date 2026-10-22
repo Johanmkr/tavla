@@ -61,6 +61,7 @@ in the help:
 | `!` | cycle priority high → med → low |
 | `m` | move to another project or goal (only reachable homes are offered) |
 | `p` | promote an idea or chore to a task (scope 3); elsewhere it pastes nothing |
+| `T` | triage: empty the inbox one item at a time (see below) |
 | `D` | drop (asks first; refused while other tasks depend on it) |
 | `u` | undo the last change (asks, and names it) |
 | `v` / `V` | mark a row / mark the whole column · with no marks: show done items |
@@ -93,6 +94,30 @@ the rows whose id or title contains it, and a subproject also matches its
 parent's id. `↑`/`↓` (or `ctrl-n`/`ctrl-p`) move, `enter` takes the highlighted
 row, and `esc` clears what you typed, then closes. Letters are always text
 there, so `j` and `k` don't move.
+
+## Emptying the inbox: triage
+
+`T` goes through the inbox one item at a time, one kind per pass: the chores
+(`todo.md`), then the ideas (`inbox.md`). It starts with the kind under the
+cursor; `c`, `i` and `f` switch to chores, ideas, or the ideas filed under
+projects and goals, and the top line counts what each pass has left. One key
+decides each item, and the next one appears:
+
+| Key | The item becomes |
+|---|---|
+| `t` | a task: pick `project` (no goal) or `project › goal`, then edit the title |
+| `g` | a goal in a project you pick |
+| `P` | a project, top-level or under one you pick |
+| `s` | a subtask of a task you pick |
+| `l` | an idea filed under a project or goal, for later |
+| `x` | nothing: it was done already (a chore is ticked off, an idea removed) |
+| `D` | nothing: dropped |
+| `n` / `b` | skip / back one |
+| `u` | undo the last change |
+
+`#tags` in the text become the new item's tags. Each decision is one commit
+that removes the item and creates what it became, and the place you used last
+is listed first next time. When a pass is empty, `enter` starts the next.
 
 ## Marking several rows
 

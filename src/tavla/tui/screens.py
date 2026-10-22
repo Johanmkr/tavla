@@ -1,9 +1,10 @@
-"""Modal screens: a one-line prompt, a picker, a yes/no confirmation, a
-read-only list, the full-screen flow board, and the key help."""
+"""Modal screens: a one-line prompt, a picker, a yes/no confirmation, inbox
+triage, a read-only list, the full-screen flow board, and the key help."""
 
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from pathlib import Path
 from typing import Any, ClassVar
 
 from rich.segment import Segment
@@ -17,6 +18,8 @@ from textual.strip import Strip
 from textual.widgets import Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
+from tavla.core import inbox
+from tavla.core.store import Content
 from tavla.tui.model import Line
 
 MODAL_CSS = """
@@ -198,6 +201,149 @@ class Confirm(ModalScreen[bool]):
         self.dismiss(value)
 
 
+class Triage(ModalScreen[None]):
+    """Empty the inbox one item at a time, one kind per pass: chores, then
+    ideas, then (when asked) the ideas filed under projects. Each key decides
+    the item on the card; the app does the asking and the writing
+    (``decide``) and calls :meth:`load` when the change has landed."""
+
+    DEFAULT_CSS = MODAL_CSS
+    BINDINGS: ClassVar[list[BindingType]] = [
+        Binding("escape,q", "close", show=False),
+        Binding("t", "decide('task')", show=False),
+        Binding("g", "decide('goal')", show=False),
+        Binding("P", "decide('project')", show=False),
+        Binding("s", "decide('subtask')", show=False),
+        Binding("l", "decide('later')", show=False),
+        Binding("x", "decide('finish')", show=False),
+        Binding("D", "decide('drop')", show=False),
+        Binding("n,j,down", "skip(1)", show=False),
+        Binding("b,k,up", "skip(-1)", show=False),
+        Binding("enter", "next_pass", show=False),
+        Binding("u", "undo", show=False),
+        Binding("c", "switch('todo')", show=False),
+        Binding("i", "switch('idea')", show=False),
+        Binding("f", "switch('filed')", show=False),
+    ]
+    KEYS = (
+        "t task   g goal   P project   s subtask\n"
+        "l later: file under a project or goal\n"
+        "x done already   D drop   n skip   b back   u undo   esc close"
+    )
+    FILED_KEYS = (
+        "t task   g goal   P project   s subtask\n"
+        "l move to another project or goal\n"
+        "x done already   D drop   n keep   b back   u undo   esc close"
+    )
+
+    def __init__(
+        self,
+        root: Path,
+        kind: str,
+        decide: Callable[[Triage, str, inbox.Item], None],
+    ) -> None:
+        super().__init__()
+        self.root, self.kind, self.decide = root, kind, decide
+        self.index = 0
+        self.busy = False  # a decision is being written: keys wait
+        self.items: list[inbox.Item] = []
+        self.counts: dict[str, int] = {}
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Static(id="card")
+
+    def on_mount(self) -> None:
+        self.load()
+
+    @property
+    def current(self) -> inbox.Item | None:
+        return self.items[self.index] if 0 <= self.index < len(self.items) else None
+
+    def load(self) -> None:
+        """Re-read the items (a decision landed, or the pass changed); the
+        cursor stays at its position, which is now the next item."""
+        content = Content.open(self.root)
+        self.items = inbox.items(content, self.kind)
+        self.counts = inbox.counts(content)
+        self.index = min(self.index, max(len(self.items) - 1, 0))
+        self.busy = False
+        self.query_one("#card", Static).update(self.card())
+
+    def next_kind(self) -> str | None:
+        """The pass to offer when this one is through."""
+        later = inbox.KINDS[inbox.KINDS.index(self.kind) + 1 :]
+        return next((k for k in later if self.counts.get(k)), None)
+
+    def passes(self) -> Text:
+        """``c chores 2 · i ideas 3 · f filed 6``: the passes and their keys,
+        this one in bold."""
+        out = Text()
+        for n, (key, kind) in enumerate((("c", "todo"), ("i", "idea"), ("f", "filed"))):
+            if n:
+                out.append(" · ", style="dim")
+            label = f"{key} {inbox.NAMES[kind].split()[0]} {self.counts.get(kind, 0)}"
+            out.append(label, style="bold reverse" if kind == self.kind else "dim")
+        return out
+
+    def card(self) -> Text:
+        text = self.passes()
+        text.append("\n\n")
+        text.append_text(self.body())
+        return text
+
+    def body(self) -> Text:
+        name = inbox.NAMES[self.kind].capitalize()
+        item = self.current
+        if item is None:
+            text = Text.assemble((f"{name}: nothing left ✓", "bold green"), "\n\n")
+            following = self.next_kind()
+            if following is not None:
+                n = self.counts[following]
+                text.append(f"enter: go through the {inbox.NAMES[following]} ({n})\n")
+            text.append("esc close", style="dim")
+            return text
+        text = Text.assemble(
+            (f"{name} · {self.index + 1} of {len(self.items)}", "bold"),
+            "\n\n",
+            (item.text, "bold"),
+            "\n",
+            (f"from {item.where}", "dim"),
+            "\n\n",
+            (self.FILED_KEYS if self.kind == "filed" else self.KEYS, "dim"),
+        )
+        return text
+
+    def action_decide(self, action: str) -> None:
+        item = self.current
+        if item is None or self.busy:
+            return
+        self.decide(self, action, item)
+
+    def action_skip(self, step: int) -> None:
+        if self.items and not self.busy:
+            self.index = (self.index + step) % len(self.items)
+            self.query_one("#card", Static).update(self.card())
+
+    def action_switch(self, kind: str) -> None:
+        if kind != self.kind and not self.busy:
+            self.kind, self.index = kind, 0
+            self.load()
+
+    def action_next_pass(self) -> None:
+        following = self.next_kind() if self.current is None else None
+        if following is not None:
+            self.kind, self.index = following, 0
+            self.load()
+
+    def action_undo(self) -> None:
+        if not self.busy:
+            self.app.run_action("undo")
+
+    def action_close(self) -> None:
+        self.dismiss(None)
+
+
 class ListScreen(ModalScreen[None]):
     """A read-only, scrollable list of lines (people, warnings, notes)."""
 
@@ -349,6 +495,7 @@ HELP = [
             ("!", "cycle priority high → med → low"),
             ("m", "move to another project or goal"),
             ("p", "promote an idea or chore to a task (inbox)"),
+            ("T", "triage: go through chores, then ideas, one at a time"),
             ("D", "drop (asks first; refused while other tasks depend on it)"),
             ("u", "undo the last change (asks, and names it)"),
             ("J  K", "move the row down / up (writes `order:`)"),

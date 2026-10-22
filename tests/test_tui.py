@@ -414,6 +414,99 @@ def test_inbox_header_has_no_idea_number(demo_repo):
     assert seen["breadcrumb"] == []
 
 
+def triage_card(app: TavlaApp) -> str:
+    return str(app.screen.query_one("#card").content)
+
+
+def with_chores(root: Path) -> Path:
+    content = Content.open(root)
+    todos.add(content, "Book the dentist")
+    todos.add(content, "Draft the methods intro #writing")
+    return root
+
+
+def test_triage_goes_through_chores_then_offers_the_ideas(demo_repo):
+    with_chores(demo_repo)
+    seen: dict[str, str] = {}
+
+    def look(name):
+        return lambda app: seen.__setitem__(name, triage_card(app))
+
+    drive(
+        demo_repo,
+        "3",
+        lambda app: app.column("list").select_key("todo:1"),
+        "T",
+        look("first"),
+        "x",
+        look("second"),
+        "D",
+        look("empty"),
+        "enter",
+        look("ideas"),
+    )
+    assert "Chores · 1 of 2" in seen["first"] and "Book the dentist" in seen["first"]
+    assert "Chores · 1 of 1" in seen["second"]
+    assert "nothing left" in seen["empty"] and "go through the ideas (3)" in seen["empty"]
+    assert "Ideas · 1 of 3" in seen["ideas"]
+    assert todos.open_todos(Content.open(demo_repo)) == []
+
+
+def test_triage_switches_passes_with_c_and_i(demo_repo):
+    with_chores(demo_repo)
+    seen: dict[str, str] = {}
+    drive(
+        demo_repo,
+        "3",
+        "T",
+        "c",
+        lambda app: seen.__setitem__("c", triage_card(app)),
+        "i",
+        lambda app: seen.__setitem__("i", triage_card(app)),
+    )
+    assert "Chores ·" in seen["c"] and "Ideas ·" in seen["i"]
+
+
+def test_triage_t_makes_a_task_with_an_edited_title(demo_repo):
+    with_chores(demo_repo)
+
+    def pick(app):
+        pick_option(app, "thesis|write-up")
+
+    drive(
+        demo_repo,
+        "3",
+        lambda app: app.column("list").select_key("todo:2"),
+        "T",
+        "n",  # skip the dentist
+        "t",
+        pick,
+        "enter",
+        "ctrl+u",
+        "type:Draft the intro",
+        "enter",
+    )
+    content = Content.open(demo_repo)
+    task = next(t for t in content.tasks() if t.title == "Draft the intro")
+    assert task.goal == "write-up" and task.tags == ["writing"]
+    assert [t.text for t in todos.open_todos(content)] == ["Book the dentist"]
+
+
+def test_triage_p_makes_a_subproject_and_l_files_for_later(demo_repo):
+    with_chores(demo_repo)
+
+    def under_thesis(app):
+        pick_option(app, "thesis")
+
+    drive(demo_repo, "3", "T", "c", "P", under_thesis, "enter", "enter")
+    content = Content.open(demo_repo)
+    assert next(p for p in content.projects() if p.title == "Book the dentist").parent == "thesis"
+
+    drive(demo_repo, "3", "T", "c", "l", under_thesis, "enter")
+    filed = ideas.read(ideas.resolve_scope(Content.open(demo_repo), "thesis"))
+    assert "Draft the methods intro #writing" in [r.idea.text for r in filed]
+
+
 def test_scope_4_shows_status_and_the_overdue_task(demo_repo):
     seen = drive(demo_repo, "4")
     assert seen["rows"]["list"][0] == "heading:status"
