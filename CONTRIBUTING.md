@@ -19,7 +19,8 @@ uv run tv --help             # run the CLI from your clone
 ```
 
 CI runs the same lint, format check and tests on Linux and macOS with Python
-3.11–3.13 for every push and pull request.
+3.11 and 3.13 (the oldest supported and the newest) for every push and pull
+request.
 
 ## Workflow
 
