@@ -744,7 +744,7 @@ def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None)
         lines.append(Line(Text("")))
         lines.append(Line(heading(f"Sessions · total {focus.format_duration(total)}")))
         for s in sessions[-3:]:
-            lines.append(Line(dim("  " + focus.session_line(s).lstrip("- "))))
+            lines.append(Line(Padding(dim(focus.session_line(s).lstrip("- ")), (0, 0, 0, 2))))
         if working and current:
             took = focus.format_duration(current.elapsed(now))
             lines.append(
