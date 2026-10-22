@@ -183,3 +183,6 @@ ca48ffc task: start pipeline
 - When the chapter structure is clear, break the `write` goal into one task
   per chapter, chained with `--after` if order matters.
 - Run `tv status` once a week, and `tv flow thesis --open` when you plan.
+- Run `tv` on its own to see all of this on one screen: the thesis's goals,
+  each goal's tasks and the flow board, with single keys for the commands
+  above. See [The full-screen view](../guide/tui.md).

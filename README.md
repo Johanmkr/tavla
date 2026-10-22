@@ -96,12 +96,27 @@ tv done                                    # -> Now unblocked: run-the-baseline
 tv capture "try mixed precision #speed"    # a quick thought, into the inbox
 tv todo buy HDMI cables                    # a small chore, outside any project
 tv status                                  # stale projects, what's waiting, what's due
+tv                                         # all of it on one screen (q quits)
 ```
 
 `tv` is short for `tavla`. Ids can be abbreviated to any unique prefix or
 piece of the title, and `tv COMMAND -h` shows every option with examples.
 [Getting started](https://johanmkr.github.io/tavla/getting-started/) walks
 through this properly.
+
+## The full-screen view
+
+`tv` on its own opens everything on one screen, made to sit in a terminal or
+tmux pane all day: projects, goals and tasks in columns, the task you're on
+in the preview, and the `next` ranking, the inbox and the agenda one key away.
+Single keys do what the commands do (`space` done, `w` work, `c` capture,
+`T` empty the inbox), each as its own commit, so `u` undoes them, and it
+reloads by itself when anything else changes the content.
+
+![tv ui on the demo: a goal's tasks, ticking a subtask, the flow board, next, inbox, agenda and a quick capture](docs/assets/tui.gif)
+
+Press `?` inside for every key, or read
+[The full-screen view](https://johanmkr.github.io/tavla/guide/tui/).
 
 ## Status
 
@@ -110,9 +125,10 @@ between releases. Your content is plain files in git, and every change to the
 file layout comes with a `tavla migrate` step, so upgrading never strands it.
 
 **Works today:** projects and subprojects, goals, tasks with subtasks and
-dependencies, ideas and the inbox, progress logs, deliverables, `next`,
-`status`, the `flow` board, `undo`, `check`, `demo`, `--json` output, and
-`tv ui` — the full-screen view of all of it.
+dependencies, ideas, todos and the inbox with triage, work sessions (one task
+at a time, or a terminal per task), people and email, progress logs,
+deliverables, `next`, `status`, `find`, the `flow` board, `undo`, `check`,
+`demo`, `--json` output, and `tv ui`, the full-screen view of all of it.
 **Later:** links to code repos and a reading library synced with Zotero.
 
 ## Learn more
