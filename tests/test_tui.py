@@ -516,7 +516,7 @@ def test_flow_board_jumps_back_to_the_hierarchy(demo_repo):
 
 
 def test_goal_column_special_rows_fill_the_right_columns(demo_repo):
-    """`◆ deliverables` lists the project's deliverables; `(loose)` its loose
+    """`◆ deliverables` lists the project's deliverables; `loose tasks` its loose
     tasks. Both are separate rows in the goal column, and the preview follows
     whichever column has focus."""
 

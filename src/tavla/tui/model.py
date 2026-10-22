@@ -33,7 +33,7 @@ from tavla.core.entities import (
 from tavla.core.flow import Board, CardState
 from tavla.core.store import Content
 
-LOOSE = "(loose)"
+LOOSE = "loose tasks"
 
 PROJECT_MARKS = {
     ProjectStatus.ACTIVE: "",
@@ -173,7 +173,7 @@ def loose_tasks(content: Content, project: Project) -> list[Task]:
 def goal_rows(
     content: Content, project: Project | None, *, show_all: bool = False, today: dt.date
 ) -> list[Row]:
-    """A project's goals, then `(loose)` when it has tasks without one."""
+    """A project's goals, then `loose tasks` when it has tasks without one."""
     if project is None:
         return []
     rows = []
@@ -181,7 +181,9 @@ def goal_rows(
         if not show_all and g.status == TaskStatus.DONE:
             continue
         state = goal_state(g, content.goal_tasks(g))
-        left = Text.assemble(marker(state), " ", (g.id, "dim" if state == CardState.DONE else ""))
+        left = Text.assemble(
+            marker(state), " ", (g.title, "dim" if state == CardState.DONE else "")
+        )
         right = Text.assemble(short_due(g.due, today), " " if g.due else "", dim(_progress(g)))
         rows.append(
             Row(f"goal:{g.id}", "goal", two_columns(left, right), ref=g, search=f"{g.id} {g.title}")
@@ -218,7 +220,7 @@ def goal_column_rows(
         search="deliverables",
         column="goal",
     )
-    # After the goals, before `(loose)` when there is one: always present, so
+    # After the goals, before `loose tasks` when there is one: always present, so
     # there is somewhere to press `a` even in a project with no deliverables.
     loose_at = next((n for n, r in enumerate(rows) if r.kind == "loose"), len(rows))
     rows.insert(loose_at, deliverable_row)
@@ -273,7 +275,7 @@ def task_rows(
     for t in context_tasks(content, ctx, show_all=show_all):
         state = task_state(t)
         style = "dim" if state == CardState.DONE else "bold" if t.id == working else ""
-        left = Text.assemble(marker(state), " ", (t.id, style))
+        left = Text.assemble(marker(state), " ", (t.title, style))
         right = Text()
         if t.status != TaskStatus.DONE:
             right.append_text(short_due(t.due, today))
@@ -346,10 +348,10 @@ def hidden_row(column: str, count: int) -> Row:
 
 
 def task_row(task: Task, *, column: str, today: dt.date, working: str | None = None) -> Row:
-    """One task line: state, id, due date, subtask progress."""
+    """One task line: state, title, due date, subtask progress."""
     state = task_state(task)
     style = "dim" if state == CardState.DONE else "bold" if task.id == working else ""
-    left = Text.assemble(marker(state), " ", (task.id, style))
+    left = Text.assemble(marker(state), " ", (task.title, style))
     right = Text()
     if task.status != TaskStatus.DONE:
         right.append_text(short_due(task.due, today))
@@ -445,7 +447,7 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
             Row(
                 f"stale:{stale.project.id}",
                 "project",
-                two_columns(Text.assemble(("☾ ", "dim"), stale.project.id), dim(idle)),
+                two_columns(Text.assemble(("☾ ", "dim"), stale.project.title), dim(idle)),
                 ref=stale.project,
                 search=f"{stale.project.id} {stale.project.title} stale",
                 column="list",
@@ -457,7 +459,7 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
                 f"waiting:{task.id}",
                 "task",
                 two_columns(
-                    Text.assemble(marker(task_state(task)), " ", task.id),
+                    Text.assemble(marker(task_state(task)), " ", task.title),
                     dim(f"after {', '.join(task.waiting_on)}"),
                 ),
                 ref=task,
@@ -471,7 +473,7 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
                 f"ready:{goal.id}",
                 "goal",
                 two_columns(
-                    Text.assemble(marker(CardState.DONE), " ", goal.id),
+                    Text.assemble(marker(CardState.DONE), " ", goal.title),
                     dim("all tasks done"),
                 ),
                 ref=goal,
@@ -515,7 +517,7 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
             f"{t.id} {t.title} due",
             marker(task_state(t)),
             " ",
-            t.id,
+            t.title,
         )
         entries.append((t.due, row))
     for g in report.due_goals:
@@ -527,12 +529,12 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
             f"{g.id} {g.title} due",
             marker(goal_state(g, [])),
             " ",
-            g.id,
+            g.title,
         )
         entries.append((g.due, row))
     for d in report.deadlines:
         row = dated(
-            d.deadline, f"deadline:{d.id}", "deliverable", d, f"{d.id} {d.title}", "◆ ", d.id
+            d.deadline, f"deadline:{d.id}", "deliverable", d, f"{d.id} {d.title}", "◆ ", d.title
         )
         entries.append((d.deadline, row))
     current = focus.current(content)
@@ -545,7 +547,7 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
             working,
             f"{working.id} {working.title} working",
             Text("▶ ", style="bold cyan"),
-            (working.id, "bold"),
+            (working.title, "bold"),
         )
         entries.append((today, row))
     for _, row in sorted(entries, key=lambda pair: (pair[0], pair[1].key)):

@@ -11,7 +11,7 @@ The left column is the **scope** you are in, chosen with `1`-`4` (or `tab`):
 
 | Key | Scope | The left column holds |
 |---|---|---|
-| `1` | project | the project's goals, then `◆ deliverables` and `(loose)` |
+| `1` | project | the project's goals, then `◆ deliverables` and `loose tasks` |
 | `2` | next | the `next` ranking, then goals with no tasks yet |
 | `3` | inbox | `IDEAS` (from `inbox.md`), then `CHORES` (from `todo.md`) |
 | `4` | agenda | the `status` report, today's chores, then everything dated |
