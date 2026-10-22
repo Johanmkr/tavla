@@ -123,6 +123,7 @@ def test_task_detail_lists_subtasks_as_selectable_lines(demo_repo):
     text = plain(lines)
     assert "Run the NUTS baseline" in text
     assert "blocks" in text and "run-adaptive" in text
+    assert "[x] Toy model" in text and "[ ] Hierarchical model" in text
 
 
 def test_marking_a_row_survives_a_two_column_grid():

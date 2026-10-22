@@ -66,6 +66,22 @@ in the help:
 | `P` | pick the project |
 | `r`, `ctrl-p`, `q` | reload, command palette (themes), quit |
 
+## Symbols
+
+| Symbol | Meaning |
+|---|---|
+| `●` | ready: can be started now |
+| `▶` | doing (in the header: the task you are working on) |
+| `○` | waiting on tasks that aren't done (`after`) |
+| `✗` | blocked |
+| `✓` | done |
+| `[ ]` / `[x]` | subtask open / ticked |
+| `◆` | deliverable |
+| `☾` | project with no activity for a while |
+| `▣` | open task terminals (`W`) |
+
+`?` lists them too.
+
 ## Marking several rows
 
 `v` marks the row under the cursor and `j`/`k` extend the marks; `V` marks the

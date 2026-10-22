@@ -290,6 +290,22 @@ HELP = [
         ],
     ),
     (
+        "What the symbols mean",
+        [
+            ("●", "ready: can be started now"),
+            ("▶", "doing (in the header: the task you are working on)"),
+            ("○", "waiting on tasks that aren't done (`after`)"),
+            ("✗", "blocked (status)"),
+            ("✓", "done"),
+            ("[ ]  [x]", "subtask open / ticked"),
+            ("◆", "deliverable"),
+            ("☾", "project with no activity for a while (stale)"),
+            ("⏸  ▪", "project paused / archived"),
+            ("▣", "open task terminals (`W`)"),
+            ("·", "idea"),
+        ],
+    ),
+    (
         "Seeing",
         [
             ("v", "mark a row; j/k extend, space and friends then act on all marks"),

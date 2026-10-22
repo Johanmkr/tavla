@@ -642,7 +642,7 @@ def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None)
         lines.append(Line(Text("")))
         lines.append(Line(heading(f"Subtasks {task.subtasks_done}/{task.subtasks_total}")))
         for s in task.subtasks:
-            mark = marker(CardState.DONE if s.done else CardState.READY)
+            mark = Text("[x]", style="dim green") if s.done else Text("[ ]", style="bold")
             text = Text.assemble("  ", mark, " ", (s.text, "dim" if s.done else ""))
             lines.append(Line(text, subtask=s, key=f"sub:{s.number}"))
 
