@@ -274,6 +274,7 @@ HELP = [
             ("x", "reopen"),
             ("s", "start (mark doing)"),
             ("w", "work on this task; again to pause"),
+            ("W", "open in a terminal of its own (a subtask in the preview); closing = done"),
             ("o  O", "add here  /  one level up (project, goal, task, idea)"),
             ("n", "note (## Updates; a log line on a project)"),
             ("e", "open in $EDITOR: validated and committed on return"),

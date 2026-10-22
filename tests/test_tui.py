@@ -575,6 +575,24 @@ def test_work_and_pause(demo_repo, git):
     assert last_commit(git, demo_repo).startswith("focus: pause run-baseline")
 
 
+def test_shift_w_opens_a_task_terminal(demo_repo, git, monkeypatch):
+    from tavla.core import terminal
+
+    launched: list[list[str]] = []
+    monkeypatch.setenv(terminal.ENV_TERMINAL, "kitty")
+    monkeypatch.setattr(terminal.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(terminal, "spawn", lambda cmd, cwd: launched.append(cmd))
+
+    def pick(app):
+        app.column("list").focus()
+        app.column("list").select_key("task:run-baseline")
+
+    drive(demo_repo, "2", pick, "W")
+    assert launched[0][-2:] == ["session", "run-baseline"]
+    assert Content.open(demo_repo).task("run-baseline").status == TaskStatus.DOING
+    assert focus.current(Content.open(demo_repo)) is None  # not the one-task focus
+
+
 def test_note_appends_to_updates(demo_repo, git):
     def pick(app):
         app.column("list").focus()

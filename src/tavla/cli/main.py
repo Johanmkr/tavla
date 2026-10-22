@@ -72,8 +72,11 @@ app.command(
     epilog=examples(
         "tv work draft-methods # start (marks it doing)",
         "tv work # what am I on, and its subtasks",
+        "tv work -t draft-methods # in a terminal of its own; closing it = done",
+        "tv work -t draft-methods -s 2 # for subtask 2; closing ticks it",
     ),
 )(focus.work)
+app.command("session", hidden=True)(focus.session)
 app.command(
     "pause",
     rich_help_panel=WORKING,

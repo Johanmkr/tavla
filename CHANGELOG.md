@@ -58,6 +58,12 @@ once (see Upgrading).
   every column. It reloads by itself whenever the content repo changes. Piped
   or in scripts it still prints help. See
   [The full-screen view](docs/guide/tui.md).
+- `tavla work -t TASK` (and `W` in `tavla ui`) opens the task in a terminal
+  of its own, titled with the task and in its own Catppuccin colour
+  (`tavla task edit TASK --colour NAME` changes it). Closing the terminal logs
+  the session and marks the task done; `-s N` does it for one subtask, which
+  is ticked instead. `tavla pause` inside the terminal keeps it from
+  finishing. Several can be open at once.
 
 ### Changes
 - tavla now depends on Textual (for `tavla ui`); other commands don't load it.

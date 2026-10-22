@@ -47,6 +47,7 @@ in the help:
 | `x` | reopen — vim's `x` deletes a character |
 | `s` | start: mark doing |
 | `w` | work on the task (`tv work`); on the task you are working on, pause |
+| `W` | open the task in a terminal of its own (`tv work -t`; a subtask in the preview); closing it marks it done |
 | `n` | note in `## Updates` (on a project: a log line) |
 | `o` / `O` | add at the cursor's level / one level up (task, goal, project, …) |
 | `e` | open in `$EDITOR`; validated and committed when you return |

@@ -9,15 +9,24 @@ content repo, which exists only while you are working on something::
 When the stretch of work ends, it is written to the task's ``## Sessions``
 section as ``- 2026-10-12 09:30-11:05 (1h35m)``: with the end date as well
 when it ran past midnight, and an optional ``: note`` at the end.
+
+A task can also be worked on in a terminal of its own (``tv work -t``). Those
+sessions don't use ``focus.yaml``, so several can be open at once: each one
+is a small file in the cache dir, kept by the ``tv session`` process that runs
+the terminal's shell, and when the terminal closes the session is logged and
+the task marked done (or the subtask ticked). ``tv pause`` inside the
+terminal keeps it from finishing.
 """
 
 from __future__ import annotations
 
 import datetime as dt
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from tavla import config
 from tavla.core import dates, git_sync, parsing
 from tavla.core.entities import UPDATES_HEADING, Task, TaskStatus
 from tavla.core.errors import NotFoundError, TavlaError, ValidationError
@@ -25,6 +34,9 @@ from tavla.core.store import Content
 
 FOCUS_FILE = "focus.yaml"
 SESSIONS_HEADING = "Sessions"
+# Set in the shell of a task terminal: the task, and its session file.
+ENV_TASK = "TAVLA_TASK"
+ENV_SESSION = "TAVLA_SESSION"
 
 _HEADER = "# The task you are working on — managed by tavla (`tv work`, `tv pause`).\n"
 
@@ -72,7 +84,10 @@ def current(content: Content) -> Focus | None:
 
 
 def focused_task(content: Content) -> Task:
-    """The task being worked on; an error explaining what to do if there's none."""
+    """The task being worked on (in a task terminal, that terminal's task);
+    an error explaining what to do if there's none."""
+    if os.environ.get(ENV_TASK):
+        return content.task(os.environ[ENV_TASK])
     focus = current(content)
     if focus is None:
         raise TavlaError("you aren't working on a task; pick one with `tv work TASK`")
@@ -227,3 +242,148 @@ def rename(content: Content, old_id: str, new_id: str) -> list[Path]:
         return []
     _write_focus(focus.path, new_id, focus.since)
     return [focus.path]
+
+
+# --- task terminals --------------------------------------------------------------
+
+
+@dataclass
+class TerminalSession:
+    task_id: str
+    since: dt.datetime
+    root: Path  # the content repo
+    path: Path  # this session's file
+    subtask: str | None = None  # text of the subtask the terminal is for
+    hold: bool = False  # `tv pause` inside: log the session but don't finish
+    pid: int = 0
+
+
+def sessions_dir() -> Path:
+    return config.cache_dir() / "sessions"
+
+
+def _write_terminal(session: TerminalSession) -> None:
+    data = {
+        "task": session.task_id,
+        "since": f"{session.since:%Y-%m-%d %H:%M}",
+        "root": str(session.root),
+        "pid": session.pid,
+    }
+    if session.subtask is not None:
+        data["subtask"] = session.subtask
+    if session.hold:
+        data["hold"] = True
+    parsing.write_yaml(session.path, data)
+
+
+def read_terminal(path: Path) -> TerminalSession | None:
+    """The session in ``path``, or None if it is gone or unreadable."""
+    try:
+        data = parsing.read_yaml(path)
+        return TerminalSession(
+            task_id=str(data["task"]),
+            since=dt.datetime.fromisoformat(str(data["since"])),
+            root=Path(data["root"]),
+            path=path,
+            subtask=None if data.get("subtask") is None else str(data["subtask"]),
+            hold=bool(data.get("hold")),
+            pid=int(data.get("pid") or 0),
+        )
+    except (OSError, TypeError, KeyError, ValueError, TavlaError):
+        return None
+
+
+def start_terminal(
+    content: Content,
+    task: Task,
+    subtask: str | None = None,
+    *,
+    pid: int | None = None,
+    now: dt.datetime | None = None,
+) -> TerminalSession:
+    """Record that a terminal for ``task`` (or one of its subtasks) is open."""
+    pid = pid or os.getpid()
+    sessions_dir().mkdir(parents=True, exist_ok=True)
+    session = TerminalSession(
+        task.id,
+        (now or dates.local_now()).replace(second=0, microsecond=0),
+        content.root.resolve(),
+        sessions_dir() / f"{pid}.yaml",
+        subtask,
+        pid=pid,
+    )
+    _write_terminal(session)
+    return session
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def terminal_sessions(content: Content) -> list[TerminalSession]:
+    """Task terminals open on this content repo, oldest first. Files left by
+    terminals that died without cleaning up are removed."""
+    out = []
+    root = content.root.resolve()
+    for path in sorted(sessions_dir().glob("*.yaml")) if sessions_dir().is_dir() else []:
+        session = read_terminal(path)
+        if session is None or not _alive(session.pid):
+            path.unlink(missing_ok=True)
+        elif session.root == root:
+            out.append(session)
+    return sorted(out, key=lambda s: s.since)
+
+
+def this_terminal() -> TerminalSession | None:
+    """The session of the task terminal this process runs in, if any."""
+    path = os.environ.get(ENV_SESSION)
+    return read_terminal(Path(path)) if path else None
+
+
+def hold_terminal(session: TerminalSession) -> None:
+    """``tv pause`` inside a task terminal: closing it only logs the session."""
+    session.hold = True
+    _write_terminal(session)
+
+
+def end_terminal(
+    content: Content, session: TerminalSession, *, now: dt.datetime | None = None
+) -> str:
+    """The terminal closed: log the session in the task file and, unless it
+    was held, mark the task done (or tick the subtask), in one commit.
+    Returns what happened, in a few words."""
+    session = read_terminal(session.path) or session  # `tv pause` may have held it
+    session.path.unlink(missing_ok=True)
+    content.refresh()
+    task = next((t for t in content.tasks() if t.id == session.task_id), None)
+    if task is None:
+        return f"{session.task_id} no longer exists; nothing recorded"
+    git_sync.require_repo(content.root)
+    now = now or dates.local_now()
+    focus = Focus(task.id, session.since, session.path)
+    took = format_duration(_record_session(task, focus, now, None).duration)
+    text = task.path.read_text()
+    if session.hold:
+        done, message = None, f"logged {took} on {task.id}"
+    elif session.subtask is not None:
+        item = next(
+            (i for i, d, t in parsing.checkbox_items(text) if t == session.subtask and not d), None
+        )
+        done = None if item is None else parsing.set_checkbox(text, item, True)
+        message = f"ticked '{session.subtask}' after {took}" if done else f"logged {took}"
+    elif task.status != TaskStatus.DONE:
+        done = parsing.set_frontmatter_key(text, "status", TaskStatus.DONE.value)
+        message = f"done {task.id} after {took}"
+    else:
+        done, message = None, f"logged {took} on {task.id} (already done)"
+    if done is not None:
+        task.path.write_text(done)
+    git_sync.commit(content.root, f"session: {message}", [task.path])
+    content.refresh()
+    return message

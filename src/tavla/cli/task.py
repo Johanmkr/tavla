@@ -40,7 +40,7 @@ from tavla.cli.people import (
     print_people_field,
     show_people,
 )
-from tavla.core import focus, ops, people, queries
+from tavla.core import colours, focus, ops, people, queries
 from tavla.core.dates import parse_date
 from tavla.core.entities import Priority, Task, TaskStatus, to_dict
 from tavla.core.store import Content
@@ -199,6 +199,14 @@ def edit(
         ),
     ] = None,
     person: PersonEditOpt = None,
+    colour: Annotated[
+        str | None,
+        typer.Option(
+            "--colour",
+            help=f"Terminal colour for `tv work -t`: {', '.join(colours.ACCENTS)}; "
+            "'none' picks one from the id.",
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the task in $EDITOR.
@@ -223,6 +231,8 @@ def edit(
         changes["project"] = content.project(project_id).id
     if person:
         changes["people"] = people.to_yaml(people.apply_specs(content, task, person))
+    if colour is not None:
+        changes["colour"] = None if is_clear(colour) else colour.strip().lower()
     if changes or title is not None:
         edited = ops.set_fields(content, task, changes, title=title)
     else:

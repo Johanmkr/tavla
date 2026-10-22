@@ -80,6 +80,37 @@ Each stretch of work (start, end, duration and an optional note) is added to
 the task's `## Sessions` section when you pause or finish. `tv done` with no
 id finishes the task you are on, and `-m "..."` adds a note to the session.
 
+### A terminal per task: `work -t`
+
+```console
+$ tv work -t pipeline
+Opened pipeline (Set up training pipeline) in kitty; closing the terminal marks it done.
+$ tv work -t pipeline -s 2      # for subtask 2 only; closing ticks it
+```
+
+`tv work -t TASK` opens a new terminal window for the task: titled with the
+task (`Task › subtask` with `-s`), in the task's own Catppuccin colour, and
+started in the project's linked folder. The task is marked `doing`. Inside
+it, `tick`, `untick`, `subtask`, `note` and `done` act on that task.
+
+When you close the terminal (`exit`, Ctrl-D or the window's close button),
+the session is logged in `## Sessions` and the task is marked done, or with
+`-s` the subtask is ticked. Changed your mind? Run `tv pause` in the terminal
+first: closing it then only logs the session.
+
+Any number of task terminals can be open at once; they don't use the
+one-task rule of `tv work`. `tv work` on its own lists them.
+
+- **Colour:** picked from the task id, so a task always gets the same one.
+  `tv task edit TASK --colour mauve` picks another (rosewater, flamingo, pink,
+  mauve, red, maroon, peach, yellow, green, teal, sky, sapphire, blue,
+  lavender); `--colour none` goes back to the default.
+- **Terminal:** the one tavla runs in (kitty, ghostty, wezterm, alacritty,
+  foot, gnome-terminal, konsole or xterm), else the first one installed. Set
+  `$TAVLA_TERMINAL` or `terminal = "ghostty"` in `config.toml` to choose. It
+  can also be a command with `{title}`, `{cwd}`, `{background}`,
+  `{foreground}` and `{accent}` in it; tavla appends what runs inside.
+
 ## `start` and `done`
 
 ```sh

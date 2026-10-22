@@ -32,7 +32,18 @@ from textual.worker import Worker, WorkerState
 
 from tavla import config
 from tavla.cli.common import date_change, open_in_editor
-from tavla.core import dates, flow, git_sync, history, ideas, ops, people, queries, todos
+from tavla.core import (
+    dates,
+    flow,
+    git_sync,
+    history,
+    ideas,
+    ops,
+    people,
+    queries,
+    terminal,
+    todos,
+)
 from tavla.core import focus as work
 from tavla.core.entities import (
     Deliverable,
@@ -70,10 +81,10 @@ NEXT_PRIORITY = {
 # The hint line: what the keys do where the cursor is.
 HINTS = {
     ("project", "list"): "enter tasks  o goal  O project  space done  s start  P project",
-    ("project", "mid"): "space done  s start  w work  a after  A unlink  J K order  m move",
-    ("project", "preview"): "space tick  o subtask  e edit  w work  n note  esc back",
-    ("next", "list"): "space done  s start  w work  enter open  e edit  t due  m move",
-    ("next", "preview"): "space tick  o subtask  e edit  n note  esc back",
+    ("project", "mid"): "space done  s start  w work  W terminal  a after  J K order  m move",
+    ("project", "preview"): "space tick  o subtask  e edit  w work  W terminal  n note  esc back",
+    ("next", "list"): "space done  s start  w work  W terminal  enter open  e edit  t due",
+    ("next", "preview"): "space tick  o subtask  e edit  W terminal  n note  esc back",
     ("inbox", "list"): "space done  p promote  o add  O project  D drop  e edit file",
     ("inbox", "preview"): "space tick  o subtask  D drop  esc back",
     ("agenda", "list"): "enter go to item  space done  w work  o todo  / filter",
@@ -266,6 +277,7 @@ class TavlaApp(App[None]):
         Binding("x", "reopen", show=False),
         Binding("s", "start", show=False),
         Binding("w", "work", show=False),
+        Binding("W", "terminal", show=False),
         Binding("n", "note", show=False),
         Binding("o", "add_here", show=False),
         Binding("O", "add_above", show=False),
@@ -701,6 +713,12 @@ class TavlaApp(App[None]):
             right.append(f" {work.format_duration(current.elapsed())}", style="cyan")
         else:
             right.append("○ w to start", style="dim")
+        terminals = work.terminal_sessions(self.content)
+        if terminals:
+            many = len(terminals) > 1
+            right.append(
+                f"  ▣ {len(terminals)} terminals" if many else f"  ▣ {terminals[0].task_id}"
+            )
         report = self._status_report()
         if report is not None:
             overdue = sum(1 for t in report.due_tasks if t.due and t.due < report.today)
@@ -1169,6 +1187,28 @@ class TavlaApp(App[None]):
             return Outcome(f"Working on {task_id}{note}", select=("list", f"task:{task_id}"))
 
         self.write(enter)
+
+    def action_terminal(self) -> None:
+        """`W`: open the task (or, in the preview, the subtask) in a terminal
+        of its own; closing it marks the task done or ticks the subtask."""
+        row = self.target()
+        if row is None or row.kind != "task":
+            self.nothing("Select a task to open in a terminal")
+            return
+        task_id, subtask = row.ref.id, self.selected_subtask()
+
+        def job(c: Content) -> JobResult:
+            task = c.task(task_id)
+            fresh = None
+            if subtask is not None:
+                fresh = model.subtask_by_number(task, subtask.number)
+                if fresh is None or fresh.text != subtask.text:
+                    raise ValidationError(f"{task.path} changed on disk; try again")
+            name = terminal.open_task(c, task, fresh)
+            done = "ticks it" if fresh else "marks it done"
+            return Outcome(f"Opened {task_id} in {name}; closing it {done}")
+
+        self.write(job)
 
     def action_note(self) -> None:
         row = self.target()
