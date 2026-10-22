@@ -37,6 +37,11 @@ once (see Upgrading).
   and `promote` (into a task or goal) manage them. `status` counts open
   todos.
 - `tavla check` reports a `focus.yaml` that names an unknown task.
+- `tavla find WORDS` searches projects, goals, tasks (with their notes),
+  deliverables, ideas, todos and logs, and shows the line that matched.
+- `tavla log PROJECT` without text shows the project's log, newest first;
+  `tavla log` alone shows the project whose folder you are in, or all of
+  them. `-n N` sets how many.
 - `tavla project pause|resume|done|archive ID` change a project's status, and
   `tavla project drop ID` deletes a project (refused while it has
   subprojects or tasks elsewhere depend on it; `--force` when it still has

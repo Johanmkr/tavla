@@ -13,6 +13,7 @@ from tavla.cli import (
     add,
     capture,
     deliverable,
+    find,
     flow,
     focus,
     goal,
@@ -63,9 +64,25 @@ app.command(
         "tv flow project-a --open # only what's left",
     ),
 )(flow.flow_)
+app.command(
+    "find",
+    rich_help_panel=DAILY,
+    epilog=examples(
+        "tv find baseline",
+        "tv find mixed precision -p thesis",
+    ),
+)(find.find)
 app.command("add", rich_help_panel=DAILY)(add.add)
 app.command("capture", rich_help_panel=DAILY)(capture.capture)
-app.command("log", rich_help_panel=DAILY)(capture.log)
+app.command(
+    "log",
+    rich_help_panel=DAILY,
+    epilog=examples(
+        'tv log thesis "Sent chapter 2 to the advisor"',
+        "tv log thesis # the newest entries",
+        "tv log -n 0 # every entry of every project",
+    ),
+)(capture.log)
 app.add_typer(todo.app, name="todo", rich_help_panel=DAILY)
 app.add_typer(inbox.app, name="inbox", rich_help_panel=DAILY)
 app.command(

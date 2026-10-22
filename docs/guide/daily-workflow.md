@@ -190,7 +190,40 @@ Logged to thesis: pipeline runs end to end on toy data
 
 This appends a timestamped line to the project's `log.md`. It's the
 lowest-effort way to leave a trail, and it keeps the project from being
-flagged as stale. `project show` includes the most recent log entries.
+flagged as stale.
+
+Without the text, `tv log` reads the log back, newest first: `tv log thesis`
+shows that project's last ten entries, and `tv log` on its own shows those of
+the project whose folder you are in, or of every project (`-n 0` shows all of
+them, `-G` ignores the folder).
+
+```console
+$ tv log thesis -n 2
+2026-10-20        Supervisor meeting: aim for a full draft by the end of November
+2026-10-16 14:10  Baseline converges on logistic regression; hierarchical model is slow
+```
+
+## `find`: search everything
+
+```console
+$ tv find baseline
+Goals (1)
+  experiments  [doing]  Experiments chapter  (thesis)
+               … Compare the adaptive sampler against the NUTS baseline on three models.
+Tasks (1)
+  run-baseline  [doing]  Run the NUTS baseline  (thesis)
+Ideas (1)
+  thesis:2  Reuse the baseline trace plots in the #teaching slides
+Log (1)
+  2026-10-16 14:10  Baseline converges on logistic regression; hierarchical model is slow  (thesis)
+```
+
+Every word has to appear, in any case. `find` looks through projects, goals
+and tasks (their titles, tags and the whole file: instructions, notes,
+ideas), deliverables, the inbox and project ideas, todos and the logs.
+Finished items are included and shown dim, and `-p` keeps to one project and
+its subprojects. The first column is what to type in the next command:
+`tv task show run-baseline`, `tv idea promote thesis:2`.
 
 ## `status`: a health check
 
