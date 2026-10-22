@@ -468,6 +468,21 @@ def inbox_rows(content: Content, *, today: dt.date) -> list[Row]:
         )
         for t in open_todos
     ]
+    # Ideas already filed under a project, goal or task: listed so they get
+    # looked at again, with where they live on the right.
+    filed = [r for scope in ideas.all_scopes(content)[1:] for r in ideas.read(scope)]
+    rows.append(heading_row("heading:filed", "FILED IDEAS", column="list", count=len(filed)))
+    rows += [
+        Row(
+            f"idea:{r.scope.label}:{r.number}",
+            "idea",
+            two_columns(Text.assemble(("· ", "dim"), r.idea.text), dim(r.scope.label)),
+            ref=r,
+            search=f"{r.idea.text} {r.scope.label}",
+            column="list",
+        )
+        for r in filed
+    ]
     return rows
 
 
@@ -799,7 +814,7 @@ def idea_detail(ref: ideas.IdeaRef) -> list[Line]:
     lines = _lines(Text(ref.idea.text, style="bold"), dim(f"idea {ref.ref}"))
     if ref.idea.tags:
         lines.append(Line(Text.assemble(dim("tags  "), " ".join(f"#{t}" for t in ref.idea.tags))))
-    lines += _lines(Text(""), dim("p promote to a task · D drop"))
+    lines += _lines(Text(""), dim("T triage · p promote to a task · space done · D drop"))
     return lines
 
 

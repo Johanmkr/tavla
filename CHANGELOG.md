@@ -81,6 +81,8 @@ once (see Upgrading).
 - `T` in `tavla ui` triages the inbox: chores, then ideas, one at a time, and
   one key turns each into a task, goal, project or subtask, files it under a
   project or goal for later, marks it done or drops it.
+- The inbox in `tavla ui` also lists the ideas filed under projects, goals
+  and tasks (`FILED IDEAS`), with where each one lives.
 - `tavla ui` lists a project's subprojects at the top of its goal column:
   `enter` opens one, `h` goes back to the parent, and the breadcrumb shows
   the parents.

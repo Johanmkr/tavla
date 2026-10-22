@@ -13,7 +13,7 @@ The left column is the **scope** you are in, chosen with `1`-`4` (or `tab`):
 |---|---|---|
 | `1` | project | the project's `▸` subprojects, its goals, then `◆ deliverables` and `loose tasks` |
 | `2` | next | the `next` ranking, then goals with no tasks yet |
-| `3` | inbox | `IDEAS` (from `inbox.md`), then `CHORES` (from `todo.md`) |
+| `3` | inbox | `IDEAS` (from `inbox.md`), `CHORES` (from `todo.md`), then `FILED IDEAS` (under projects, goals and tasks) |
 | `4` | agenda | the `status` report, today's chores, then everything dated |
 
 In the project scope two more columns follow: the selected goal's **tasks**,

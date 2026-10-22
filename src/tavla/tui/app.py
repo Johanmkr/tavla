@@ -1980,11 +1980,11 @@ class TavlaApp(App[None]):
         first (chores or ideas), else whichever has items."""
         row = self.target() if self.scope == "inbox" else None
         counts = inbox.counts(self.content)
-        kind = {"todo": "todo", "idea": "idea", "filed": "filed"}.get(row.kind if row else "")
-        if row is not None and row.key == "heading:chores":
-            kind = "todo"
-        elif row is not None and row.key == "heading:ideas":
-            kind = "idea"
+        kind = {"todo": "todo", "idea": "idea"}.get(row.kind if row else "")
+        if kind == "idea" and row is not None and row.ref.scope.kind != ideas.INBOX:
+            kind = "filed"
+        if row is not None and row.key.startswith("heading:"):
+            kind = {"chores": "todo", "ideas": "idea", "filed": "filed"}[row.key.split(":")[1]]
         if kind is None:
             kind = next((k for k in ("todo", "idea") if counts[k]), "todo")
         self.push_screen(Triage(self.root, kind, self.triage_decide))

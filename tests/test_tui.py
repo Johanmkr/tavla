@@ -97,14 +97,30 @@ def test_next_column_is_the_ranking_then_goals_without_tasks(demo_repo):
     assert f"task:{done[0].id}" in keys(with_done)
 
 
-def test_inbox_rows_section_ideas_then_chores(demo_repo):
+def test_inbox_rows_section_ideas_chores_then_filed_ideas(demo_repo):
     content = Content.open(demo_repo)
     todos.add(content, "buy milk")
     rows = model.inbox_rows(content, today=demo.ANCHOR)
-    assert [r.key for r in rows if r.kind == "heading"] == ["heading:ideas", "heading:chores"]
-    assert keys(rows).index("heading:ideas") < keys(rows).index("heading:chores")
-    assert keys(rows)[-1] == "todo:1"
+    assert [r.key for r in rows if r.kind == "heading"] == [
+        "heading:ideas",
+        "heading:chores",
+        "heading:filed",
+    ]
+    filed = keys(rows)[keys(rows).index("heading:filed") + 1 :]
+    assert filed and all(not k.startswith("idea:inbox:") for k in filed)
+    assert keys(rows)[keys(rows).index("heading:filed") - 1] == "todo:1"
     assert all(r.disabled for r in rows if r.kind == "heading")
+
+
+def test_t_on_a_filed_idea_starts_the_filed_pass(demo_repo):
+    seen: dict[str, str] = {}
+
+    def on_filed(app):
+        rows = app.column("list").rows
+        app.column("list").select_key(rows[[r.key for r in rows].index("heading:filed") + 1].key)
+
+    drive(demo_repo, "3", on_filed, "T", lambda app: seen.__setitem__("card", triage_card(app)))
+    assert "Filed ideas · 1 of" in seen["card"]
 
 
 def test_agenda_rows_status_then_today_then_dates(demo_repo):
