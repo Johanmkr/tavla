@@ -706,12 +706,12 @@ class TavlaApp(App[None]):
 
     def render_header(self) -> None:
         parts = self.breadcrumb()
-        left = Text()
+        left = self.scope_tabs()
+        left.append("  ")
         for n, part in enumerate(parts):
             if n:
                 left.append(" › ", style="dim")
             left.append(part, style="bold" if n == len(parts) - 1 else "dim")
-        left.append(f" ·[{self.scope}]", style="dim")
         if self.filter:
             left.append(f"  /{self.filter}", style="bold yellow")
         if self.marked:
@@ -753,6 +753,14 @@ class TavlaApp(App[None]):
         right.append(f"  ↻ {fresh}", style="dim")
         self.query_one("#header", Static).update(model.two_columns(left, right))
 
+    def scope_tabs(self) -> Text:
+        """``1 Project  2 Next  3 Inbox  4 Agenda``, the current one in reverse."""
+        tabs = Text()
+        for key, scope in SCOPE_KEYS.items():
+            current = scope == self.scope
+            tabs.append(f" {key} {scope.title()} ", style="reverse bold" if current else "dim")
+        return tabs
+
     def _status_report(self) -> Any:
         try:
             return queries.status(self.content)
@@ -763,8 +771,7 @@ class TavlaApp(App[None]):
         """Where you are: the dropped ancestors first, so nothing is invisible."""
         parts: list[str] = []
         row = self.column("list").current
-        if self.scope != "project":
-            parts.append(self.scope)
+        if self.scope != "project":  # the scope itself is in the tabs
             if row is not None and not row.disabled and row.ref is not None:
                 parts.append(getattr(row.ref, "id", None) or row.key.split(":", 1)[-1])
             return parts

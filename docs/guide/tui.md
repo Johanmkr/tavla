@@ -21,7 +21,7 @@ and then the **preview** of whatever is selected. Selecting a task fills the
 preview with its dependencies, subtasks, work sessions and notes; selecting a
 goal shows its flow board.
 
-The header says where you are (`thesis › experiments`), what you are working
+The header starts with the four scopes as tabs (the current one highlighted), then says where you are (`thesis › experiments`), what you are working
 on and for how long, what needs attention (overdue, blocked, ideas, todos,
 stale projects), and when it last reloaded. The hint line below the columns
 says what the keys do where the cursor is.

@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from rich.console import Console
+from rich.text import Text
 from textual.widgets import Static
 from typer.testing import CliRunner
 
@@ -282,6 +283,12 @@ def test_scope_2_puts_the_next_ranking_in_column_one(demo_repo):
     assert seen["scope"] == "next"
     assert seen["current"]["list"] == f"task:{first.id}"
     assert seen["preview"] == first.id
+
+
+def test_header_shows_the_scopes_as_tabs(demo_repo):
+    snap = drive(demo_repo, "3")
+    text = Text.from_ansi(snap["header"]).plain
+    assert "1 Project  2 Next  3 Inbox  4 Agenda" in text
 
 
 def test_scope_keys_and_tab_switch(demo_repo):
