@@ -337,7 +337,7 @@ HELP = [
     (
         "Changing things",
         [
-            ("space", "done"),
+            ("space", "done (an idea: done already, so it is removed)"),
             ("x", "reopen"),
             ("s", "start (mark doing)"),
             ("w", "work on this task; again to pause"),
@@ -348,7 +348,7 @@ HELP = [
             ("t", "due date / deadline (today, +3d, fri, 2026-11-01, none)"),
             ("!", "cycle priority high → med → low"),
             ("m", "move to another project or goal"),
-            ("p", "promote an idea to a task (inbox)"),
+            ("p", "promote an idea or chore to a task (inbox)"),
             ("D", "drop (asks first; refused while other tasks depend on it)"),
             ("u", "undo the last change (asks, and names it)"),
             ("J  K", "move the row down / up (writes `order:`)"),

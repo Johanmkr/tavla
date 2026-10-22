@@ -152,12 +152,15 @@ def move(content: Content, ref: IdeaRef, target: Scope) -> None:
     )
 
 
-def drop(content: Content, ref: IdeaRef) -> None:
+def drop(content: Content, ref: IdeaRef, *, done: bool = False) -> None:
+    """Delete an idea; ``done`` says in the commit that it was done, not
+    abandoned."""
     git_sync.require_repo(content.root)
     _delete(ref)
+    verb = "done" if done else "drop from"
     git_sync.commit(
         content.root,
-        f"idea: drop from {ref.scope.label}: {ops.summary(ref.idea.text)}",
+        f"idea: {verb} {ref.scope.label}: {ops.summary(ref.idea.text)}",
         [ref.scope.path],
     )
 

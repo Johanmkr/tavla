@@ -75,6 +75,9 @@ once (see Upgrading).
   longer unticks a finished one by accident.
 - Pickers in `tavla ui` (project, move, after, people, …) filter as you type,
   and the project picker indents subprojects under their parent.
+- In the inbox of `tavla ui`, `D` drops ideas, `space` removes an idea that is
+  already done, `p` promotes chores as well as ideas, and the promote picker
+  lists each project's goals under it.
 - `tavla ui` lists a project's subprojects at the top of its goal column:
   `enter` opens one, `h` goes back to the parent, and the breadcrumb shows
   the parents.

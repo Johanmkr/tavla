@@ -203,6 +203,21 @@ def goal_rows(
     return rows
 
 
+def task_homes(content: Content) -> list[tuple[str, str, str]]:
+    """Picker options for where a new task can go: each project (loose, no
+    goal) followed by its open goals, as ``project|goal`` keys."""
+    goals = sorted(content.goals(), key=queries.order_key)
+    options = []
+    for p in content.projects():
+        options.append((f"{p.id}|", f"{p.id}  (no goal)", p.title))
+        options += [
+            (f"{p.id}|{g.id}", f"{p.id} › {g.title}", g.id)
+            for g in goals
+            if g.project == p.id and g.status != TaskStatus.DONE
+        ]
+    return options
+
+
 def subproject_rows(content: Content, project: Project) -> list[Row]:
     """``▸`` rows for a project's direct subprojects, with their open tasks
     (their own subprojects' included): `enter` opens one."""

@@ -13,7 +13,7 @@ from textual.widgets import Static
 from typer.testing import CliRunner
 
 from tavla.cli.main import app as cli
-from tavla.core import dates, demo, focus, ops, queries, todos
+from tavla.core import dates, demo, focus, ideas, ops, queries, todos
 from tavla.core.entities import TaskStatus
 from tavla.core.store import Content
 from tavla.tui import model
@@ -359,6 +359,59 @@ def test_scope_3_lists_ideas_then_chores_and_ticks_one(demo_repo, git):
     drive(demo_repo, "3", lambda app: app.column("list").select_key("todo:1"), "space")
     assert (demo_repo / "todo.md").read_text().count("- [x]") == 1
     assert last_commit(git, demo_repo) == "todo: done buy milk"
+
+
+def idea_texts(root: Path) -> list[str]:
+    return [r.idea.text for r in ideas.read(ideas.scope_of(Content.open(root), None))]
+
+
+def test_d_drops_ideas_and_space_marks_one_done(demo_repo, git):
+    _, second, third = idea_texts(demo_repo)
+    drive(demo_repo, "3", lambda app: app.column("list").select_key("idea:inbox:1"), "D", "y")
+    assert idea_texts(demo_repo) == [second, third]
+    assert last_commit(git, demo_repo).startswith("idea: drop from inbox:")
+
+    drive(demo_repo, "3", lambda app: app.column("list").select_key("idea:inbox:1"), "space")
+    assert idea_texts(demo_repo) == [third]
+    assert last_commit(git, demo_repo).startswith("idea: done inbox:")
+
+
+def test_marked_ideas_drop_together(demo_repo):
+    drive(
+        demo_repo,
+        "3",
+        lambda app: app.column("list").select_key("idea:inbox:1"),
+        "v",
+        "j",
+        "D",
+        "y",
+    )
+    assert len(idea_texts(demo_repo)) == 1
+
+
+def test_p_promotes_a_chore_into_a_goal(demo_repo):
+    todos.add(Content.open(demo_repo), "Write the methods section")
+
+    def pick(app):
+        pick_option(app, "thesis|write-up")
+
+    drive(demo_repo, "3", lambda app: app.column("list").select_key("todo:1"), "p", pick, "enter")
+    content = Content.open(demo_repo)
+    task = next(t for t in content.tasks() if t.title == "Write the methods section")
+    assert task.goal == "write-up"
+    assert todos.read(content) == []
+
+
+def test_promote_picker_groups_goals_under_their_project(demo_repo):
+    homes = model.task_homes(Content.open(demo_repo))
+    labels = [label for _, label, _ in homes]
+    at = labels.index("thesis  (no goal)")
+    assert labels[at + 1].startswith("thesis › ")
+
+
+def test_inbox_header_has_no_idea_number(demo_repo):
+    seen = drive(demo_repo, "3", "j")
+    assert seen["breadcrumb"] == []
 
 
 def test_scope_4_shows_status_and_the_overdue_task(demo_repo):

@@ -86,7 +86,7 @@ HINTS = {
     ("project", "preview"): "space tick  o subtask  e edit  w work  W terminal  n note  esc back",
     ("next", "list"): "space done  s start  w work  W terminal  enter open  e edit  t due",
     ("next", "preview"): "space tick  o subtask  e edit  W terminal  n note  esc back",
-    ("inbox", "list"): "space done  p promote  o add  O project  D drop  e edit file",
+    ("inbox", "list"): "p promote  space done  D drop  o add  e edit file",
     ("inbox", "preview"): "space tick  o subtask  D drop  esc back",
     ("agenda", "list"): "enter go to item  space done  w work  o todo  / filter",
     ("agenda", "preview"): "space tick  o subtask  e edit  esc back",
@@ -798,8 +798,8 @@ class TavlaApp(App[None]):
         parts: list[str] = []
         row = self.column("list").current
         if self.scope != "project":  # the scope itself is in the tabs
-            if row is not None and not row.disabled and row.ref is not None:
-                parts.append(getattr(row.ref, "id", None) or row.key.split(":", 1)[-1])
+            if row is not None and not row.disabled and getattr(row.ref, "id", None):
+                parts.append(row.ref.id)
             return parts
         project = self.project
         parts += self.project_ancestors()
@@ -1143,7 +1143,7 @@ class TavlaApp(App[None]):
 
             self.write(tick)
             return
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo", "idea")]
         if not rows:
             self.nothing("Nothing to mark done here")
             return
@@ -1174,6 +1174,9 @@ class TavlaApp(App[None]):
                 todo = _fresh_todo(c, row.ref)
                 todos.set_done(c, [todo])
                 return Outcome(f"Done: {todo.text}", at=position)
+            if row.kind == "idea":
+                ideas.drop(c, _fresh_idea(c, row.ref), done=True)
+                return Outcome(f"Done: {row.ref.idea.text}", at=position)
             if row.kind == "goal":
                 goal = c.goal(row.ref.id)
                 if ops.complete(c, goal) is None:
@@ -1645,34 +1648,35 @@ class TavlaApp(App[None]):
 
     def action_promote(self) -> None:
         row = self.target()
-        if row is None or row.kind != "idea":
-            self.nothing("Promote works on an idea (scope 3)")
+        if row is None or row.kind not in ("idea", "todo"):
+            self.nothing("Promote works on an idea or a chore (scope 3)")
             return
         ref = row.ref
-        options = [(f"{p.id}|", f"project {p.id}") for p in self.content.projects()]
-        options += [(f"{g.project}|{g.id}", f"goal {g.id}") for g in self.content.goals()]
 
         def promote(choice: str) -> None:
             project_id, goal_id = choice.split("|", 1)
 
             def job(c: Content) -> JobResult:
-                fresh = _fresh_idea(c, ref)
                 goal = c.goal(goal_id) if goal_id else None
-                item = ideas.promote(c, fresh, project=c.project(project_id), goal=goal)
-                return Outcome(f"Promoted to task {item.id}", select=("list", f"task:{item.id}"))
+                project = c.project(project_id)
+                if row.kind == "idea":
+                    item = ideas.promote(c, _fresh_idea(c, ref), project=project, goal=goal)
+                else:
+                    item = todos.promote(c, _fresh_todo(c, ref), project=project, goal=goal)
+                return Outcome(f"Promoted to task {item.id} in {goal_id or project_id}")
 
             self.write(job)
 
-        self.pick("Promote to a task in", options, promote)
+        self.pick("Promote to a task in", model.task_homes(self.content), promote)
 
     def action_drop(self) -> None:
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo", "idea")]
         if not rows:
             self.nothing("Nothing to drop here")
             return
         content = Content.open(self.root)
         for row in rows:
-            if row.kind == "todo":
+            if row.kind in ("todo", "idea"):
                 continue
             try:
                 ops.check_droppable(content, _item(content, row.kind, row.ref.id))
@@ -1689,6 +1693,9 @@ class TavlaApp(App[None]):
                     if row.kind == "todo":
                         todos.drop(c, [_fresh_todo(c, row.ref)])
                         names.append(row.ref.text)
+                    elif row.kind == "idea":
+                        ideas.drop(c, _fresh_idea(c, row.ref))
+                        names.append(row.ref.idea.text)
                     else:
                         ops.drop(c, _item(c, row.kind, row.ref.id))
                         names.append(row.ref.id)
@@ -1700,7 +1707,7 @@ class TavlaApp(App[None]):
         what = (
             f"Drop {rows[0].ref.id}?"
             if len(rows) == 1 and hasattr(rows[0].ref, "id")
-            else f"Drop {rows[0].ref.text}?"
+            else f"Drop “{_text(rows[0])}”?"
             if len(rows) == 1
             else f"Drop {len(rows)} items?"
         )
@@ -2178,7 +2185,7 @@ class TavlaApp(App[None]):
             return
         if key == "p":
             row = self.target()
-            if row is not None and row.kind == "idea":
+            if row is not None and row.kind in ("idea", "todo"):
                 event.prevent_default()
                 self.action_promote()
             # Any other row: `p` falls through to Textual (nothing to paste on).
@@ -2205,6 +2212,9 @@ def _complete(c: Content, row: Row) -> list[str]:
     if row.kind == "todo":
         todos.set_done(c, [_fresh_todo(c, row.ref)])
         return [row.ref.text]
+    if row.kind == "idea":
+        ideas.drop(c, _fresh_idea(c, row.ref), done=True)
+        return [row.ref.idea.text]
     if row.kind == "goal":
         goal = c.goal(row.ref.id)
         return [goal.id] if ops.complete(c, goal) is not None else []
@@ -2233,17 +2243,26 @@ def _finish(c: Content, task: Task) -> str:
 
 
 def _fresh_todo(c: Content, todo: todos.Todo) -> todos.Todo:
-    for t in todos.read(c):
-        if t.number == todo.number and t.text == todo.text:
+    """``todo`` as it is now: at its number, or wherever its text moved to (an
+    earlier one in the same bulk change went)."""
+    now = todos.read(c)
+    for t in [*(t for t in now if t.number == todo.number), *now]:
+        if t.text == todo.text:
             return t
     raise ValidationError("todo.md changed on disk; try again")
 
 
 def _fresh_idea(c: Content, ref: ideas.IdeaRef) -> ideas.IdeaRef:
-    for r in ideas.read(ref.scope):
-        if r.number == ref.number and r.idea.text == ref.idea.text:
+    now = ideas.read(ref.scope)
+    for r in [*(r for r in now if r.number == ref.number), *now]:
+        if r.idea.text == ref.idea.text:
             return r
     raise ValidationError(f"the ideas in {ref.scope.label} changed on disk; try again")
+
+
+def _text(row: Row) -> str:
+    """What an idea or todo row says."""
+    return row.ref.idea.text if row.kind == "idea" else row.ref.text
 
 
 def _board(content: Content, kind: str, ident: str, *, view: str, today: Any) -> flow.Board:

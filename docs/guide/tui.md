@@ -48,7 +48,7 @@ in the help:
 
 | Key | What it does |
 |---|---|
-| `space` | done (goals, tasks, todos, and a subtask in the preview) |
+| `space` | done (goals, tasks, todos, and a subtask in the preview; an idea: done already, removed) |
 | `x` | reopen — vim's `x` deletes a character |
 | `s` | start: mark doing |
 | `w` | work on the task (`tv work`); on the task you are working on, pause |
@@ -60,7 +60,7 @@ in the help:
 | `t` | due date / deadline (`today`, `+3d`, `fri`, `2026-11-01`; `none` clears) |
 | `!` | cycle priority high → med → low |
 | `m` | move to another project or goal (only reachable homes are offered) |
-| `p` | promote an idea to a task (scope 3); elsewhere it pastes nothing |
+| `p` | promote an idea or chore to a task (scope 3); elsewhere it pastes nothing |
 | `D` | drop (asks first; refused while other tasks depend on it) |
 | `u` | undo the last change (asks, and names it) |
 | `v` / `V` | mark a row / mark the whole column · with no marks: show done items |
