@@ -85,7 +85,7 @@ another name against a copy of your notes.
 1. **`tv` is the stable release**, installed like any tester's:
 
    ```sh
-   uv tool install --force git+https://github.com/Johanmkr/tavla@v0.3.0
+   uv tool install --force git+https://github.com/Johanmkr/tavla@v0.4.0
    ```
 
    It uses your real content repo, and `tv update` moves it to new releases.
