@@ -309,6 +309,13 @@ def test_header_shows_the_scopes_as_tabs(demo_repo):
     assert "1 Project  2 Next  3 Inbox  4 Agenda" in text
 
 
+def test_narrow_header_keeps_the_breadcrumb_and_shortens_alerts(demo_repo):
+    snap = drive(demo_repo, "enter", size=(80, 24))
+    text = Text.from_ansi(snap["header"]).plain
+    assert "teaching › grade-hw2" in text
+    assert "!1 ✗1" in text and "overdue" not in text
+
+
 def test_scope_keys_and_tab_switch(demo_repo):
     assert drive(demo_repo, "3")["scope"] == "inbox"
     assert drive(demo_repo, "4")["scope"] == "agenda"

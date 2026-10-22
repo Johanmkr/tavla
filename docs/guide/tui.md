@@ -140,7 +140,10 @@ did.
 
 Below 100 columns the leftmost column is dropped and the header keeps it as a
 breadcrumb: at 80 columns you have `TASK | preview` with `thesis › experiments`
-above. Below 40×12 it asks for a bigger window.
+above. When the header gets tight, only the current scope keeps its name
+(`1 Project  2  3  4`) and the alerts shrink to counts (`!1 ✗1 ·3 ☐2 ☾1`:
+overdue, blocked, ideas, todos, stale), so the breadcrumb stays readable.
+Below 40×12 it asks for a bigger window.
 
 ![The same view at 80 columns: the goal column is gone, the breadcrumb names it](../assets/tui-narrow.svg)
 

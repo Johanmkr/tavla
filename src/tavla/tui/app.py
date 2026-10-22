@@ -709,8 +709,17 @@ class TavlaApp(App[None]):
     # --- header & hints ----------------------------------------------------------
 
     def render_header(self) -> None:
+        bar = self.query_one("#header", Static)
+        width = (bar.size.width or self.size.width) - 2
+        left, right = self.header_parts(compact=False)
+        if left.cell_len + right.cell_len + 1 > width:
+            # Narrow: shorten the tabs and alerts so where you are stays readable.
+            left, right = self.header_parts(compact=True)
+        bar.update(model.two_columns(left, right))
+
+    def header_parts(self, *, compact: bool) -> tuple[Text, Text]:
         parts = self.breadcrumb()
-        left = self.scope_tabs()
+        left = self.scope_tabs(compact=compact)
         left.append("  ")
         for n, part in enumerate(parts):
             if n:
@@ -721,48 +730,51 @@ class TavlaApp(App[None]):
         if self.marked:
             left.append(f"  marked {len(self.marked)}", style="bold")
 
-        right = Text()
+        items: list[Text] = []
         current = work.current(self.content)
         if current is not None:
-            right.append("▶ ", style="bold cyan")
-            right.append(current.task_id, style="bold")
-            right.append(f" {work.format_duration(current.elapsed())}", style="cyan")
-        else:
-            right.append("○ w to start", style="dim")
+            items.append(
+                Text.assemble(
+                    ("▶ ", "bold cyan"),
+                    (current.task_id, "bold"),
+                    (f" {work.format_duration(current.elapsed())}", "cyan"),
+                )
+            )
         terminals = work.terminal_sessions(self.content)
         if terminals:
             many = len(terminals) > 1
-            right.append(
-                f"  ▣ {len(terminals)} terminals" if many else f"  ▣ {terminals[0].task_id}"
-            )
+            items.append(Text(f"▣ {len(terminals)}" if many else f"▣ {terminals[0].task_id}"))
         report = self._status_report()
         if report is not None:
             overdue = sum(1 for t in report.due_tasks if t.due and t.due < report.today)
-            alerts = []
-            if overdue:
-                alerts.append((f"!{overdue} overdue", "bold red"))
-            if report.blocked:
-                alerts.append((f"✗{len(report.blocked)} blocked", "red"))
-            if report.inbox:
-                alerts.append((f"{report.inbox} ideas", "dim"))
-            if report.todos:
-                alerts.append((f"{report.todos} todos", "dim"))
-            if report.stale:
-                alerts.append((f"{len(report.stale)} stale", "dim"))
-            if alerts:
-                right.append("  ")
-                right.append_text(Text(" · ").join(Text(t, style=s) for t, s in alerts))
+            alerts = [
+                (overdue, "!{} overdue", "!{}", "bold red"),
+                (len(report.blocked), "✗{} blocked", "✗{}", "red"),
+                (report.inbox, "{} ideas", "·{}", "dim"),
+                (report.todos, "{} todos", "☐{}", "dim"),
+                (len(report.stale), "{} stale", "☾{}", "dim"),
+            ]
+            shown = [
+                Text((short if compact else full).format(n), style=style)
+                for n, full, short, style in alerts
+                if n
+            ]
+            if shown:
+                items.append(Text(" " if compact else " · ").join(shown))
         age = int(time.monotonic() - self.loaded_at)
         fresh = "just now" if age < 5 else f"{age}s" if age < 60 else f"{age // 60}m"
-        right.append(f"  ↻ {fresh}", style="dim")
-        self.query_one("#header", Static).update(model.two_columns(left, right))
+        if not compact or age >= 60:
+            items.append(Text(f"↻ {fresh}", style="dim"))
+        return left, Text("  ").join(items)
 
-    def scope_tabs(self) -> Text:
-        """``1 Project  2 Next  3 Inbox  4 Agenda``, the current one in reverse."""
+    def scope_tabs(self, *, compact: bool = False) -> Text:
+        """``1 Project  2 Next  3 Inbox  4 Agenda``, the current one in
+        reverse; ``compact`` names only the current one."""
         tabs = Text()
         for key, scope in SCOPE_KEYS.items():
             current = scope == self.scope
-            tabs.append(f" {key} {scope.title()} ", style="reverse bold" if current else "dim")
+            label = f" {key} {scope.title()} " if current or not compact else f" {key} "
+            tabs.append(label, style="reverse bold" if current else "dim")
         return tabs
 
     def _status_report(self) -> Any:
