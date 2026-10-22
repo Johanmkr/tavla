@@ -12,6 +12,7 @@ from tavla.cli.common import (
     TAGS_EDIT_HELP,
     ContentDirOpt,
     JsonOpt,
+    YesOpt,
     complete_project,
     edit_until_valid,
     emit_json,
@@ -127,6 +128,86 @@ def edit(
     session = ops.EditSession(project.path / PROJECT_FILE)
     edited = edit_until_valid(session, lambda: ops.finish_project_edit(content, project, session))
     typer.echo("No changes." if edited is None else f"Saved project {edited.id}")
+
+
+ProjectArg = Annotated[str, typer.Argument(metavar="ID", autocompletion=complete_project)]
+
+
+def _set_status(
+    ctx: typer.Context,
+    project_id: str,
+    status: ProjectStatus,
+    verb: str,
+    shown: str,
+    content_dir: Path | None,
+) -> None:
+    content = state(ctx, content_dir=content_dir).content()
+    project = content.project(project_id)
+    if ops.set_project_status(content, project, status, verb=verb) is None:
+        typer.echo(f"{project.id} is already {status}.")
+        return
+    typer.echo(f"{shown}: {project.id} ({project.title}) — was {project.status}")
+
+
+@app.command()
+@handles_errors
+def pause(ctx: typer.Context, project_id: ProjectArg, content_dir: ContentDirOpt = None) -> None:
+    """Put a project on hold: its tasks leave `tv next`, and it is never called stale."""
+    _set_status(ctx, project_id, ProjectStatus.PAUSED, "pause", "Paused", content_dir)
+
+
+@app.command()
+@handles_errors
+def resume(ctx: typer.Context, project_id: ProjectArg, content_dir: ContentDirOpt = None) -> None:
+    """Make a paused, done or archived project active again."""
+    _set_status(ctx, project_id, ProjectStatus.ACTIVE, "resume", "Resumed", content_dir)
+
+
+@app.command()
+@handles_errors
+def done(ctx: typer.Context, project_id: ProjectArg, content_dir: ContentDirOpt = None) -> None:
+    """Mark a project done: it leaves `tv next` and `tv status`. Its goals and tasks are left as they are."""
+    _set_status(ctx, project_id, ProjectStatus.DONE, "done", "Done", content_dir)
+
+
+@app.command()
+@handles_errors
+def archive(ctx: typer.Context, project_id: ProjectArg, content_dir: ContentDirOpt = None) -> None:
+    """Archive a project: like done, and also hidden from `tv project list` unless -a."""
+    _set_status(ctx, project_id, ProjectStatus.ARCHIVED, "archive", "Archived", content_dir)
+
+
+@app.command(
+    epilog=examples(
+        "tv project drop scratch",
+        "tv project drop old-course --force  # with its goals, tasks and notes",
+    )
+)
+@handles_errors
+def drop(
+    ctx: typer.Context,
+    project_id: ProjectArg,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Also drop the goals, tasks and deliverables in it."),
+    ] = False,
+    yes: YesOpt = False,
+    content_dir: ContentDirOpt = None,
+) -> None:
+    """Delete a project folder (it stays in git history; `tv undo` brings it back).
+
+    Refused while it has subprojects, while tasks elsewhere depend on its
+    tasks, and, without --force, while it has goals, tasks or deliverables.
+    `tv project archive` hides a project without deleting it.
+    """
+    st = state(ctx, content_dir=content_dir, yes=yes)
+    content = st.content()
+    project = content.project(project_id)
+    ops.check_project_droppable(content, project, force=force)
+    if not st.yes and not typer.confirm(f"Drop project {project.id} ({project.title})?"):
+        raise typer.Abort()
+    ops.drop_project(content, project, force=force)
+    typer.echo(f"Dropped project {project.id}")
 
 
 @app.command("list")

@@ -35,6 +35,10 @@ what changes. This page covers what to expect and how to help.
 
 - **Does `tv next` pick what you would pick?** If not, what did it get wrong?
 - **Does `tv flow` help you plan,** or is it noise? What's missing on it?
+- **Would you keep `tv ui` open?** Which keys did you reach for that did
+  nothing, and what did you still go to the command line for?
+- **Does triage (`T`, or `tv inbox review`) empty your inbox,** or do items
+  keep piling up?
 - **Where did you get stuck?** A confusing message, a command you expected
   to exist, a flag you had to look up every time.
 - **What do you do outside tavla** that you wish you could do in it?
@@ -55,8 +59,10 @@ Small things count: a typo in a message is worth an issue too.
 
 - **Platforms:** Linux and macOS are tested on every change. Windows isn't
   tested yet.
-- **No interactive interface yet.** Everything is commands for now; a
-  terminal UI is the next big step.
+- **The full-screen view is new.** `tv ui` does everything the daily
+  commands do, but its keys may still change between releases; the commands
+  are the stable interface. `W` (a terminal per task) opens kitty if it finds
+  it, else another terminal it knows.
 - **One writer at a time.** If you use tavla on two machines, pull before you
   start and push when you're done. Changes made on both at once have to be
   merged with git by hand.

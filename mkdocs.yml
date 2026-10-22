@@ -11,6 +11,7 @@ exclude_docs: |
   hooks/
   diagrams/
   *.tape
+  assets/*.py
 
 theme:
   name: material
@@ -80,6 +81,7 @@ nav:
       - Organising work: guide/organising-work.md
       - Ideas and the inbox: guide/ideas.md
       - Daily workflow: guide/daily-workflow.md
+      - The full-screen view: guide/tui.md
       - Editing and ids: guide/editing.md
       - Your content repo: guide/content-repo.md
       - Scripting: guide/scripting.md

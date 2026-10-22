@@ -23,5 +23,9 @@ Default NUTS settings, 4 chains, 2000 warm-up iterations.
 
 ## Ideas
 
+## Sessions
+- 2026-09-21 09:15-11:40 (2h25m): toy model and logistic regression
+- 2026-09-22 13:00-14:10 (1h10m): hierarchical model diverges
+
 ## Updates
 - 2026-09-22: Hierarchical model needs a non-centred parameterisation

@@ -135,8 +135,10 @@ def test_cli_log_unknown_project(run):
     assert run("log", "nope", "x").exit_code == EXIT_NOT_FOUND
 
 
-def test_cli_log_requires_text(run):
-    assert run("log", "project-a").exit_code != 0
+def test_cli_log_without_text_reads_and_commits_nothing(run, git_content, git):
+    before = git(git_content, "rev-parse", "HEAD")
+    assert run("log", "project-a").exit_code == 0
+    assert git(git_content, "rev-parse", "HEAD") == before
 
 
 # --- done -----------------------------------------------------------------------

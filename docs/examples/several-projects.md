@@ -100,7 +100,7 @@ What this tells you:
 
 - **ablations is stale,** and its only real task is blocked on IT. Either
   chase it, log why it's stuck (`tv log ablations "..."`), or pause it with
-  `tv project edit ablations --status paused`.
+  `tv project pause ablations`.
 - **The cluster account is overdue,** and it's high priority. Do it first.
 - **The baseline is the bottleneck:** the adaptive run, the comparison, the
   figures, the results chapter and the ablation grid all wait on it.

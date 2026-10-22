@@ -19,6 +19,7 @@ tags: []
 created: 2026-09-25
 updated: 2026-09-26
 # priority / due: optional; inherited from the goal when left out
+order: 0                        # optional; position in the list (see below)
 people:                         # optional; who is involved (goals too)
   - name: Kari Nordmann
     email: kari.nordmann@example.org
@@ -48,6 +49,12 @@ Each `people:` entry needs a name, an email address, or both. You can also
 write an entry on one line, as `- Kari Nordmann <kari.nordmann@example.org>`.
 `tv check` reports entries it can't read. A task's goal's people count as
 involved in the task too.
+
+`order:` (optional) sets where the task sits in its goal's list, or in its
+project's list of tasks without a goal. Numbered tasks come first, ascending;
+tasks without an `order:` follow, sorted by priority and due date as usual.
+`tv ui`'s `J`/`K` rewrites the numbers for a whole list in one commit, and
+`tv task edit ID --order N` sets one by hand (`--order none` clears it).
 
 The `## Sessions` section appears after your first `tv work` session ends.
 Each line is one stretch of work. A session that runs past midnight has the

@@ -80,6 +80,37 @@ Each stretch of work (start, end, duration and an optional note) is added to
 the task's `## Sessions` section when you pause or finish. `tv done` with no
 id finishes the task you are on, and `-m "..."` adds a note to the session.
 
+### A terminal per task: `work -t`
+
+```console
+$ tv work -t pipeline
+Opened pipeline (Set up training pipeline) in kitty; closing the terminal marks it done.
+$ tv work -t pipeline -s 2      # for subtask 2 only; closing ticks it
+```
+
+`tv work -t TASK` opens a new terminal window for the task: titled with the
+task (`Task › subtask` with `-s`), in the task's own Catppuccin colour, and
+started in the project's linked folder. The task is marked `doing`. Inside
+it, `tick`, `untick`, `subtask`, `note` and `done` act on that task.
+
+When you close the terminal (`exit`, Ctrl-D or the window's close button),
+the session is logged in `## Sessions` and the task is marked done, or with
+`-s` the subtask is ticked. Changed your mind? Run `tv pause` in the terminal
+first: closing it then only logs the session.
+
+Any number of task terminals can be open at once; they don't use the
+one-task rule of `tv work`. `tv work` on its own lists them.
+
+- **Colour:** picked from the task id, so a task always gets the same one.
+  `tv task edit TASK --colour mauve` picks another (rosewater, flamingo, pink,
+  mauve, red, maroon, peach, yellow, green, teal, sky, sapphire, blue,
+  lavender); `--colour none` goes back to the default.
+- **Terminal:** the one tavla runs in (kitty, ghostty, wezterm, alacritty,
+  foot, gnome-terminal, konsole or xterm), else the first one installed. Set
+  `$TAVLA_TERMINAL` or `terminal = "ghostty"` in `config.toml` to choose. It
+  can also be a command with `{title}`, `{cwd}`, `{background}`,
+  `{foreground}` and `{accent}` in it; tavla appends what runs inside.
+
 ## `start` and `done`
 
 ```sh
@@ -101,6 +132,8 @@ tv todo                         # list open todos, numbered
 tv todo done 2                  # tick off (by number or a piece of the text)
 tv todo reopen 2
 tv todo promote 3 -p thesis     # turn it into a task (-g for a goal's task)
+tv todo promote 3 --as-project  # or a project (-p PARENT: a subproject)
+tv todo promote 3 --subtask-of run-baseline
 tv todo drop 4
 tv todo clear                   # remove the ticked-off ones
 ```
@@ -110,6 +143,22 @@ Todos are for small chores and things you need to write down quickly. Ideas
 numbers when you tick them off, so `tv todo done 2 5` does what you expect. To
 add a todo that starts with a command word, use `tv todo add list the
 cables`. `tv status` shows how many are open.
+
+## `inbox`: emptying it
+
+```sh
+tv inbox                        # the chores and ideas waiting to be sorted
+tv inbox --filed                # ideas filed under projects, goals and tasks
+tv inbox review                 # go through them one at a time: chores, then ideas
+tv inbox review --ideas         # one kind only (--chores, --ideas, --filed)
+```
+
+`review` shows one item at a time and asks for one key: `t` task, `g` goal,
+`P` project, `s` subtask, `l` file it under a project or goal for later, `x`
+done already, `D` drop, `n` skip, `q` quit. Then it asks where (an id or a
+prefix; `?` lists them) and the title, with the item's text filled in. Each
+decision is one commit. The full-screen view does the same with `T` in the
+inbox.
 
 ## Subtasks and notes
 
@@ -141,7 +190,40 @@ Logged to thesis: pipeline runs end to end on toy data
 
 This appends a timestamped line to the project's `log.md`. It's the
 lowest-effort way to leave a trail, and it keeps the project from being
-flagged as stale. `project show` includes the most recent log entries.
+flagged as stale.
+
+Without the text, `tv log` reads the log back, newest first: `tv log thesis`
+shows that project's last ten entries, and `tv log` on its own shows those of
+the project whose folder you are in, or of every project (`-n 0` shows all of
+them, `-G` ignores the folder).
+
+```console
+$ tv log thesis -n 2
+2026-10-20        Supervisor meeting: aim for a full draft by the end of November
+2026-10-16 14:10  Baseline converges on logistic regression; hierarchical model is slow
+```
+
+## `find`: search everything
+
+```console
+$ tv find baseline
+Goals (1)
+  experiments  [doing]  Experiments chapter  (thesis)
+               … Compare the adaptive sampler against the NUTS baseline on three models.
+Tasks (1)
+  run-baseline  [doing]  Run the NUTS baseline  (thesis)
+Ideas (1)
+  thesis:2  Reuse the baseline trace plots in the #teaching slides
+Log (1)
+  2026-10-16 14:10  Baseline converges on logistic regression; hierarchical model is slow  (thesis)
+```
+
+Every word has to appear, in any case. `find` looks through projects, goals
+and tasks (their titles, tags and the whole file: instructions, notes,
+ideas), deliverables, the inbox and project ideas, todos and the logs.
+Finished items are included and shown dim, and `-p` keeps to one project and
+its subprojects. The first column is what to type in the next command:
+`tv task show run-baseline`, `tv idea promote thesis:2`.
 
 ## `status`: a health check
 
@@ -255,7 +337,8 @@ tools draw as a diagram. Paste it inside a ```` ```mermaid ```` block.
     ```sh
     tv status               # stale projects, due soon, waiting
     tv flow PROJECT         # what depends on what, and what can run in parallel
-    tv idea list            # triage the inbox: move, promote or drop
-    tv todo                 # promote todos that grew into tasks; tv todo clear
+    tv inbox review         # sort the chores and ideas, one at a time
+    tv inbox review --filed # look over the ideas filed under projects
+    tv todo clear           # remove the ticked-off todos
     tv goal list            # any goals ready to close or re-plan?
     ```

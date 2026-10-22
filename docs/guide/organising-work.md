@@ -12,6 +12,9 @@ Each box is a file (or a part of one) in your content repo; see
 Project
 :   A body of work with its own status (`active`, `paused`, `done`,
     `archived`), priority and tags. Only **active** projects feed into `next`.
+    `tv project pause`, `resume`, `done` and `archive` change the status,
+    and `tv project drop` deletes an empty project (`--force` takes its
+    goals and tasks with it; `tv undo` brings it all back).
 
 Goal
 :   An *outcome* you are working towards, like "Write introduction" or "Get

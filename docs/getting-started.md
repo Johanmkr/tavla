@@ -8,7 +8,7 @@ one. Install the latest release (see the
 [releases page](https://github.com/Johanmkr/tavla/releases) for its number):
 
 ```sh
-uv tool install git+https://github.com/Johanmkr/tavla@v0.3.0   # puts `tavla` and `tv` on your PATH
+uv tool install git+https://github.com/Johanmkr/tavla@v0.4.0   # puts `tavla` and `tv` on your PATH
 tv --version
 ```
 
@@ -31,12 +31,12 @@ Restart your shell afterwards.
 
 ```console
 $ tv update --check        # see what's new, change nothing
-tavla v0.4.0 is available (you have 0.3.0).
-What's new: https://github.com/Johanmkr/tavla/releases/tag/v0.4.0
+tavla v0.5.0 is available (you have 0.4.0).
+What's new: https://github.com/Johanmkr/tavla/releases/tag/v0.5.0
 Run `tavla update` to install it.
 $ tv update
-Installing v0.4.0 with uv...
-Updated tavla 0.3.0 -> 0.4.0.
+Installing v0.5.0 with uv...
+Updated tavla 0.4.0 -> 0.5.0.
 ```
 
 `update` finds the newest release and reinstalls it with
@@ -170,10 +170,21 @@ tv todo return library books     # small stuff outside any project
 tv capture "look into parallel tempering #mcmc"   # quick thought -> inbox
 tv status                        # what's stale, waiting, or due soon
 tv flow adap                     # how the goals and tasks depend on each other
+tv find tempering                # search everything
 ```
 
-Every one of these commands makes a git commit in your content repo, so you
-never need to "save".
+Every command that changes something makes a git commit in your content repo,
+so you never need to "save".
+
+### Or all of it on one screen
+
+`tv` on its own opens the full-screen view. `j`/`k` and `h`/`l` move,
+`space` marks the row done, `w` starts work on a task, `c` captures an idea,
+`1`-`4` switch between a project, `next`, the inbox and the agenda, `?` lists
+every key and `q` quits. Each change is the same commit the command would
+make, so `u` (or `tv undo`) takes it back.
+
+![tv ui at 120 columns: the goal column, a goal's tasks, and the task's detail](assets/tui-wide.svg)
 
 ## Next steps
 
@@ -181,5 +192,6 @@ never need to "save".
   subtasks and dependencies.
 - [Daily workflow](guide/daily-workflow.md) explains how `next`, `status` and
   `flow` decide what to show you.
+- [The full-screen view](guide/tui.md) lists every key of `tv ui`.
 - [A master's thesis](examples/master-thesis.md) is a complete worked example.
 - Testing tavla for someone? Read the [notes for alpha testers](alpha.md).

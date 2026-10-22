@@ -95,6 +95,23 @@ def active_projects(content: Content) -> list[Project]:
     return active
 
 
+def base_sort_key(item: Goal | Task) -> tuple:
+    """Priority, then soonest due date (undated last), then id: what a list
+    falls back on for items that carry no explicit ``order:``."""
+    return (item.priority.rank, item.due or dt.date.max, item.id)
+
+
+def order_key(item: Goal | Task) -> tuple:
+    """Display order of a goal or task in a list: an explicit ``order:``
+    first (ascending), then :func:`base_sort_key`.
+
+    This is the one place display order is defined; ``task list``, the flow
+    boards and the TUI all sort with it.
+    """
+    order = getattr(item, "order", None)
+    return (order is None, order or 0, *base_sort_key(item))
+
+
 def last_activity(content: Content, project: Project) -> dt.date | None:
     """Most recent date of any log entry or goal/task created/updated in the
     project or its subprojects (falls back to the project's ``created`` date)."""
@@ -125,6 +142,22 @@ def project_for_dir(content: Content, directory: Path) -> tuple[Project, Path] |
             ):
                 best = (project, folder)
     return best
+
+
+def current_project(content: Content, start: Path) -> Project | None:
+    """The project to open when nobody has picked one: the project linked to
+    ``start`` (``project link``, normally ``$PWD``), else the project of the
+    task being worked on, else None."""
+    from tavla.core import focus  # imported here: focus builds on the store
+
+    linked = project_for_dir(content, start)
+    if linked is not None:
+        return linked[0]
+    current = focus.current(content)
+    if current is None:
+        return None
+    task = next((t for t in content.tasks() if t.id == current.task_id), None)
+    return content.project(task.project) if task is not None else None
 
 
 # --- next ---------------------------------------------------------------------
@@ -166,9 +199,16 @@ def next_tasks(
             t.due is None,
             t.due or dt.date.max,
             project_rank.get(t.project, Priority.LOW.rank),
-            t.id,
+            *_order_tail(t),
         ),
     )
+
+
+def _order_tail(task: Task) -> tuple:
+    """``order:`` first, then id: the last tie-breakers of ``next``, so a
+    hand-arranged list keeps its order inside one priority/due bucket."""
+    order = getattr(task, "order", None)
+    return (order is None, order or 0, task.id)
 
 
 def goals_without_tasks(

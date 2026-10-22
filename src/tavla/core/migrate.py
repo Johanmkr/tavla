@@ -5,6 +5,9 @@ checklist) becomes a *goal* (``goals/<id>.md``), and each of its top-level
 subtask checkboxes becomes its own task file pointing back at the goal (nested
 checkboxes become that task's subtasks). Goal and task files get an ``## Ideas``
 section. Everything happens in one commit, so ``git revert`` undoes it.
+
+v2 -> v3: nothing to rewrite. v3 just allows an ``order:`` line on task files,
+so the migration only bumps ``schema_version`` in ``tavla.yaml``.
 """
 
 from __future__ import annotations
@@ -59,6 +62,10 @@ def plan(root: Path) -> MigrationPlan:
     version = bootstrap.schema_version(root)
     result = MigrationPlan(root, version, bootstrap.SCHEMA_VERSION)
     if version >= bootstrap.SCHEMA_VERSION:
+        return result
+    if version >= 2:
+        # v2 -> v3 only adds the optional `order:` field: the version bump
+        # itself is the whole migration, so no file moves are planned.
         return result
 
     content = Content(root)  # bypasses the version check in Content.open

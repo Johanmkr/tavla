@@ -412,3 +412,58 @@ def test_hand_edited_project_line_is_flagged_until_fixed(run, git_content):
     result = run("goal", "list")
     assert "note:" not in result.output
     assert "project-b  Write methods section" in result.output
+
+
+def test_project_pause_resume_done_archive(run, git_content, git):
+    result = run("project", "pause", "project-a")
+    assert result.exit_code == 0, result.output
+    assert "Paused: project-a" in result.output
+    assert _head(git, git_content) == "project: pause project-a"
+    assert run("project", "pause", "project-a").output.strip() == "project-a is already paused."
+
+    assert run("project", "resume", "project-a").exit_code == 0
+    assert Content.open(git_content).project("project-a").status == "active"
+    assert run("project", "done", "project-a").exit_code == 0
+    assert run("project", "archive", "project-a").exit_code == 0
+    assert _head(git, git_content) == "project: archive project-a"
+    assert Content.open(git_content).project("project-a").status == "archived"
+
+
+def test_project_drop_empty(run, git_content, git):
+    result = run("project", "drop", "project-c", "--yes")
+    assert result.exit_code == 0, result.output
+    assert "Dropped project project-c" in result.output
+    assert not (git_content / "projects" / "project-c").exists()
+    assert "project-c" not in (git_content / "registry.yaml").read_text()
+    assert _head(git, git_content) == "project: drop project-c"
+    assert git(git_content, "status", "--porcelain").strip() == ""
+
+    assert run("--yes", "undo").exit_code == 0
+    assert Content.open(git_content).project("project-c").status == "archived"
+
+
+def test_project_drop_refusals(run, git_content):
+    result = run("project", "drop", "project-b", "--yes")
+    assert result.exit_code == EXIT_INVALID
+    assert "--force" in result.output
+    result = run("project", "drop", "project-a", "--yes", "--force")
+    assert result.exit_code == EXIT_INVALID
+    assert "subprojects (ablations)" in result.output
+    assert (git_content / "projects" / "project-a").exists()
+
+
+def test_project_drop_force_takes_the_contents(run, git_content):
+    content = Content.open(git_content)
+    assert content.goals(content.project("project-b"))
+    result = run("project", "drop", "project-b", "--yes", "--force")
+    assert result.exit_code == 0, result.output
+    assert not (git_content / "projects" / "project-b").exists()
+
+
+def test_project_drop_refused_while_tasks_elsewhere_depend_on_it(run, git_content):
+    assert run("project", "add", "Other", "--id", "other").exit_code == 0
+    assert run("task", "add", "Needed", "-p", "other", "--id", "needed").exit_code == 0
+    assert run("task", "edit", "get-feedback-from-advisor", "--after", "+needed").exit_code == 0
+    result = run("project", "drop", "other", "--yes", "--force")
+    assert result.exit_code == EXIT_INVALID
+    assert "get-feedback-from-advisor" in result.output

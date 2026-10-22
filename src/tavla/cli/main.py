@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Annotated
 
@@ -12,10 +13,12 @@ from tavla.cli import (
     add,
     capture,
     deliverable,
+    find,
     flow,
     focus,
     goal,
     idea,
+    inbox,
     overview,
     people,
     project,
@@ -24,6 +27,7 @@ from tavla.cli import (
 )
 from tavla.cli.common import (
     HELP_SETTINGS,
+    ContentDirOpt,
     JsonOpt,
     State,
     emit_json,
@@ -39,8 +43,8 @@ from tavla.core.errors import EXIT_INVALID, TavlaError
 
 app = typer.Typer(
     name="tavla",
-    help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
-    no_args_is_help=True,
+    help="Research operations: projects, goals, tasks, ideas and deliverables, in plain text + git.",
+    invoke_without_command=True,
     context_settings=HELP_SETTINGS,
 )
 
@@ -60,18 +64,38 @@ app.command(
         "tv flow project-a --open # only what's left",
     ),
 )(flow.flow_)
+app.command(
+    "find",
+    rich_help_panel=DAILY,
+    epilog=examples(
+        "tv find baseline",
+        "tv find mixed precision -p thesis",
+    ),
+)(find.find)
 app.command("add", rich_help_panel=DAILY)(add.add)
 app.command("capture", rich_help_panel=DAILY)(capture.capture)
-app.command("log", rich_help_panel=DAILY)(capture.log)
+app.command(
+    "log",
+    rich_help_panel=DAILY,
+    epilog=examples(
+        'tv log thesis "Sent chapter 2 to the advisor"',
+        "tv log thesis # the newest entries",
+        "tv log -n 0 # every entry of every project",
+    ),
+)(capture.log)
 app.add_typer(todo.app, name="todo", rich_help_panel=DAILY)
+app.add_typer(inbox.app, name="inbox", rich_help_panel=DAILY)
 app.command(
     "work",
     rich_help_panel=WORKING,
     epilog=examples(
         "tv work draft-methods # start (marks it doing)",
         "tv work # what am I on, and its subtasks",
+        "tv work -t draft-methods # in a terminal of its own; closing it = done",
+        "tv work -t draft-methods -s 2 # for subtask 2; closing ticks it",
     ),
 )(focus.work)
+app.command("session", hidden=True)(focus.session)
 app.command(
     "pause",
     rich_help_panel=WORKING,
@@ -122,6 +146,36 @@ def main(
     ] = False,
 ) -> None:
     ctx.obj = State(content_dir, json_out, yes, verbose)
+    if ctx.invoked_subcommand is None and not ctx.resilient_parsing:
+        # Bare `tv`: the TUI in a terminal; help when piped or scripted.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            ui(ctx)
+            raise typer.Exit()
+        typer.echo(ctx.get_help())
+        raise typer.Exit(2)
+
+
+@app.command(
+    rich_help_panel=DAILY,
+    epilog=examples("tv ui", "tv # the same, when run in a terminal"),
+)
+@handles_errors
+def ui(ctx: typer.Context, content_dir: ContentDirOpt = None) -> None:
+    """Open the full-screen view: columns of projects, goals, tasks, preview.
+
+    `1`-`4` switch scope: a project (`PROJECT | GOAL | TASK` and the item's
+    detail on the right), `next`, the inbox and the agenda. `j`/`k` move,
+    `enter`/`l` go a column deeper, `esc` comes back; single keys mark things
+    done, start work, add, edit in $EDITOR, move, reorder with `J`/`K`, edit
+    dependencies with `a`/`A`, mark several rows with `v`, and handle people
+    with `@`. Each change is validated and committed like the CLI's, so `u`
+    (and `tv undo`) takes it back. It reloads by itself whenever the content
+    repo changes. Press `?` inside for the whole key map.
+    """
+    content = state(ctx, content_dir=content_dir).content()
+    from tavla.tui.app import run  # Textual is only imported when needed
+
+    run(content.root)
 
 
 @app.command(rich_help_panel=SETUP)
@@ -158,6 +212,8 @@ def migrate_(
 
     v1 -> v2: each task becomes a goal (tasks/ -> goals/), and each of its
     subtask checkboxes becomes a task under that goal.
+    v2 -> v3: nothing to rewrite; v3 just allows an `order:` line on tasks, so
+    only the recorded layout version changes.
     """
     st = state(ctx, content_dir=content_dir)
     plan = migrate.plan(st.content_dir)

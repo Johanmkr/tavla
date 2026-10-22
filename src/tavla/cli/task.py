@@ -40,7 +40,7 @@ from tavla.cli.people import (
     print_people_field,
     show_people,
 )
-from tavla.core import focus, ops, people
+from tavla.core import colours, focus, ops, people, queries
 from tavla.core.dates import parse_date
 from tavla.core.entities import Priority, Task, TaskStatus, to_dict
 from tavla.core.store import Content
@@ -148,6 +148,13 @@ def _priority(value: str) -> Priority:
         raise typer.BadParameter(f"'{value}' is not one of {allowed}, none") from None
 
 
+def _order(value: str) -> int:
+    try:
+        return int(value.strip())
+    except ValueError:
+        raise typer.BadParameter(f"'{value}' is not a whole number, none") from None
+
+
 @app.command(
     epilog=examples(
         "tv task edit fix-plots --status blocked",
@@ -177,6 +184,10 @@ def edit(
         str | None,
         typer.Option("--after", help="Dependencies: a,b replaces, +a,-b adjusts, 'none' clears."),
     ] = None,
+    order: Annotated[
+        str | None,
+        typer.Option("--order", help="Position in its list (0, 1, ...); 'none' clears it."),
+    ] = None,
     tags: Annotated[str | None, typer.Option("--tags", help=TAGS_EDIT_HELP)] = None,
     project_id: Annotated[
         str | None,
@@ -188,12 +199,22 @@ def edit(
         ),
     ] = None,
     person: PersonEditOpt = None,
+    colour: Annotated[
+        str | None,
+        typer.Option(
+            "--colour",
+            help=f"Terminal colour for `tv work -t`: {', '.join(colours.ACCENTS)}; "
+            "'none' picks one from the id.",
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
     """Change fields with the options given, or with none open the task in $EDITOR.
 
     Either way the result is validated and committed. Changing `project:` moves
-    the task to that project; its goal, if any, must be there too.
+    the task to that project; its goal, if any, must be there too. `--order`
+    sets where the task sits in its goal's (or project's) list; `J`/`K` in
+    `tv ui` is the quick way to move it.
     """
     content = state(ctx, content_dir=content_dir).content()
     task = content.task(task_id)
@@ -204,10 +225,14 @@ def edit(
         changes["goal"] = None if is_clear(goal_id) else content.goal(goal_id).id
     if after is not None:
         changes["depends_on"] = _after_change(content, task, after)
+    if order is not None:
+        changes["order"] = None if is_clear(order) else _order(order)
     if project_id is not None:
         changes["project"] = content.project(project_id).id
     if person:
         changes["people"] = people.to_yaml(people.apply_specs(content, task, person))
+    if colour is not None:
+        changes["colour"] = None if is_clear(colour) else colour.strip().lower()
     if changes or title is not None:
         edited = ops.set_fields(content, task, changes, title=title)
     else:
@@ -390,11 +415,6 @@ def drop(
     drop_item(st, content, "task", content.task(task_id))
 
 
-def _sort_key(task: Task) -> tuple:
-    # Priority first, then soonest due date (undated last), then id.
-    return (task.priority.rank, task.due is None, task.due, task.id)
-
-
 def subtask_progress(task: Task) -> str:
     return progress(task.subtasks_done, task.subtasks_total)
 
@@ -453,7 +473,7 @@ def list_(
         tasks = [t for t in tasks if t.status == status]
     elif not all_:
         tasks = [t for t in tasks if t.status != TaskStatus.DONE]
-    tasks = sorted(tasks, key=_sort_key)
+    tasks = sorted(tasks, key=queries.order_key)
     warn_misplaced(tasks)
 
     if st.json:

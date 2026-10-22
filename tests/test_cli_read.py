@@ -241,3 +241,51 @@ def test_examples_aligns_notes():
     assert examples("tv a # one", "tv abc # two", "tv x") == (
         "Examples:\ntv a    # one\ntv abc  # two\ntv x"
     )
+
+
+def test_log_without_text_shows_newest_first(run):
+    result = run("log", "project-a")
+    assert result.exit_code == 0, result.output
+    lines = result.output.splitlines()
+    assert lines[0].startswith("2026-09-18 14:30")
+    assert "First results on the toy model" in lines[0]
+    assert lines[1].startswith("2026-09-01") and "Kicked off" in lines[1]
+    assert len(run("log", "project-a", "-n", "1").output.splitlines()) == 1
+
+
+def test_log_of_every_project_names_them(run):
+    result = run("log", "--json")
+    data = json.loads(result.output)
+    assert data[0]["project"] == "project-a"
+    assert data[0]["text"].startswith("First results")
+    assert "project-a" in run("log").output
+
+
+def test_find_matches_every_word_across_kinds(run):
+    result = run("find", "toy", "MODEL")
+    assert result.exit_code == 0, result.output
+    assert "Ideas (1)" in result.output and "Try importance sampling" in result.output
+    assert "Log (1)" in result.output and "2026-09-18 14:30" in result.output
+    data = json.loads(run("find", "cluster", "account", "--json").output)
+    task = next(h for h in data if h["kind"] == "task")
+    assert (task["ref"], task["status"], task["match"]) == (
+        "request-cluster-account",
+        "done",
+        None,
+    )
+
+
+def test_find_shows_the_body_line_that_matched(run):
+    data = json.loads(run("find", "mention", "toy", "--json").output)
+    assert [(h["kind"], h["ref"], h["match"]) for h in data] == [
+        ("goal", "write-intro", "Mention the toy model")
+    ]
+    assert "… Mention the toy model" in run("find", "mention", "toy").output
+    data = json.loads(run("find", "acceptance", "rate", "-p", "project-a", "--json").output)
+    assert [(h["kind"], h["ref"]) for h in data] == [("idea", "project-a:1")]
+
+
+def test_find_nothing(run):
+    result = run("find", "xyzzy")
+    assert result.exit_code == 0
+    assert result.output.strip() == "Nothing found."

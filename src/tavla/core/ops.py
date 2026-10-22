@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import shutil
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -189,6 +190,7 @@ def add_project(
     tags: Iterable[str] = (),
     parent: Project | None = None,
     today: dt.date | None = None,
+    extra_paths: Iterable[Path] = (),
 ) -> Project:
     """Create a project, or a subproject of ``parent``."""
     git_sync.require_repo(content.root)
@@ -218,7 +220,9 @@ def add_project(
     content.refresh()
     registry = sync_registry(content)
     where = f" under {parent.id}" if parent else ""
-    git_sync.commit(content.root, f"project: add {project_id}{where}", [directory, registry])
+    git_sync.commit(
+        content.root, f"project: add {project_id}{where}", [directory, registry, *extra_paths]
+    )
     return content.project(project_id)
 
 
@@ -592,6 +596,46 @@ def relocate(content: Content, item: Item) -> Item:
     )
 
 
+def move_item(
+    content: Content,
+    item: Item,
+    project: Project,
+    *,
+    goal: Goal | None = None,
+    today: dt.date | None = None,
+) -> Item | None:
+    """Move a goal or task to ``project`` — and, for a task, into ``goal`` (or
+    out of any goal when it is None) — as one commit.
+
+    The file moves to the new project's directory, a goal takes its tasks
+    along, and the link checks (unknown goal, dependency cycle) run as after
+    any edit. Returns None when there is nothing to change; raises
+    ValidationError, leaving the file as it was, otherwise.
+    """
+    git_sync.require_repo(content.root)
+    wanted_goal = goal.id if goal is not None else None
+    same_project = item.project == project.id
+    same_goal = not isinstance(item, Task) or item.goal == wanted_goal
+    if same_project and same_goal:
+        return None
+    changes: dict[str, Any] = {"project": project.id}
+    if isinstance(item, Task):
+        changes["goal"] = wanted_goal
+    original = item.path.read_text()
+    item.path.write_text(_apply_changes(original, changes, frontmatter=True))
+    try:
+        edited = _reload(item)
+        # `_finish_item_change` appends " -> project X" when the file moves.
+        message = f"{kind_of(item)}: move {item.id}"
+        return _finish_item_change(
+            content, item, edited, message, today, bump=False, relocating=not same_project
+        )
+    except ValidationError:
+        item.path.write_text(original)
+        content.refresh()
+        raise
+
+
 def reset_project_line(content: Content, item: Item) -> Item:
     """Set ``item``'s ``project:`` line back to the project whose folder it is in."""
     git_sync.require_repo(content.root)
@@ -751,6 +795,68 @@ def set_project_fields(
     )
     content.refresh()
     return edited
+
+
+def set_project_status(
+    content: Content, project: Project, status: ProjectStatus, *, verb: str | None = None
+) -> Project | None:
+    """Change a project's status. Returns None if it already has that status."""
+    if project.status == status:
+        return None
+    return set_project_fields(
+        content,
+        project,
+        {"status": status.value},
+        message=f"project: {verb or status.value} {project.id}",
+    )
+
+
+def check_project_droppable(content: Content, project: Project, *, force: bool = False) -> None:
+    """Raise ValidationError unless ``project`` can be deleted: it has no
+    subprojects, nothing outside it depends on its tasks, you are not working
+    on one of them, and (unless ``force``) it holds no goals, tasks or
+    deliverables."""
+    children = content.children(project)
+    if children:
+        ids = ", ".join(c.id for c in children)
+        raise ValidationError(
+            f"project '{project.id}' has subprojects ({ids}); move or drop them first"
+        )
+    tasks = content.tasks(project)
+    inside = {t.id for t in tasks}
+    working = focus.current(content)
+    if working is not None and working.task_id in inside:
+        raise ValidationError(f"you are working on '{working.task_id}'; `tv pause` first")
+    outside = [t.id for t in content.tasks() if t.id not in inside and set(t.depends_on) & inside]
+    if outside:
+        raise ValidationError(
+            f"tasks in other projects depend on '{project.id}' ({', '.join(outside)}); "
+            "remove the dependencies first"
+        )
+    if force:
+        return
+    goals, deliverables = content.goals(project), content.deliverables(project)
+    if goals or tasks or deliverables:
+        what = ", ".join(
+            f"{len(items)} {name}"
+            for items, name in ((goals, "goals"), (tasks, "tasks"), (deliverables, "deliverables"))
+            if items
+        )
+        raise ValidationError(
+            f"project '{project.id}' still has {what}; drop them first, or use --force"
+        )
+
+
+def drop_project(content: Content, project: Project, *, force: bool = False) -> None:
+    """Delete a project's folder (it stays in git history; ``tv undo`` brings
+    it back). See :func:`check_project_droppable` for when it is refused."""
+    git_sync.require_repo(content.root)
+    check_project_droppable(content, project, force=force)
+    shutil.rmtree(project.path)
+    content.refresh()
+    registry = sync_registry(content)
+    git_sync.commit(content.root, f"project: drop {project.id}", [project.path, registry])
+    content.refresh()
 
 
 def stored_folder(folder: Path) -> str:
@@ -924,6 +1030,105 @@ def check_droppable(content: Content, item: Item | Deliverable) -> None:
             )
 
 
+# --- display order & dependencies -------------------------------------------------
+
+
+def _reorder_where(tasks: list[Task]) -> str:
+    """The list the tasks belong to: their shared goal, else their project."""
+    goals = {t.goal for t in tasks}
+    if len(goals) == 1 and (goal := goals.pop()):
+        return goal
+    projects = {t.project for t in tasks}
+    return projects.pop() if len(projects) == 1 else "tasks"
+
+
+def reorder(content: Content, tasks: Iterable[Task]) -> int:
+    """Write ``0..n-1`` into ``order:`` across ``tasks``, in the order given.
+
+    One commit for the whole list, so `tv undo` takes the move back in one
+    step. ``updated`` is left alone: arranging a list doesn't change the work.
+    Returns how many files changed (0 and no commit for an empty list).
+    """
+    git_sync.require_repo(content.root)
+    tasks = list(tasks)
+    if not tasks:
+        return 0
+    originals = {t.id: t.path.read_text() for t in tasks}
+    changed = [t for n, t in enumerate(tasks) if t.order != n]
+    if not changed:
+        return 0
+    for n, task in enumerate(tasks):
+        task.path.write_text(set_frontmatter_key(originals[task.id], "order", n))
+    try:
+        for task in tasks:
+            _reload(task)
+    except ValidationError:
+        for task in tasks:
+            task.path.write_text(originals[task.id])
+        content.refresh()
+        raise
+    where = _reorder_where(tasks)
+    git_sync.commit(
+        content.root, f"task: reorder in {where} ({len(tasks)} tasks)", [t.path for t in tasks]
+    )
+    content.refresh()
+    return len(tasks)
+
+
+def reorder_subtasks(content: Content, task: Task, numbers: Sequence[int]) -> Task:
+    """Rewrite the task's ``## Subtasks`` checkboxes in the order ``numbers``
+    gives (1-based, a permutation of the task's subtasks).
+
+    Nested checkbox lines are permuted with the rest, so a nested item can end
+    up under a different parent; keep subtasks flat to avoid that.
+    """
+    git_sync.require_repo(content.root)
+    if sorted(numbers) != list(range(1, len(task.subtasks) + 1)):
+        raise ValidationError(f"{task.path}: reorder needs every subtask exactly once")
+    text = original = task.path.read_text()
+    items = checkbox_items(text)
+    if len(items) != len(task.subtasks):
+        raise ValidationError(f"{task.path} changed on disk; try again")
+    lines = text.splitlines(keepends=True)
+    picked = [lines[items[n - 1][0]] for n in numbers]
+    for (index, _, _), line in zip(items, picked, strict=True):
+        lines[index] = line
+    text = set_frontmatter_key("".join(lines), "updated", dates.local_today())
+    task.path.write_text(text)
+    try:
+        _reload(task)
+    except ValidationError:
+        task.path.write_text(original)
+        content.refresh()
+        raise
+    git_sync.commit(content.root, f"task: edit {task.id} (subtasks reordered)", [task.path])
+    return _fresh(content, task)
+
+
+def add_dep(content: Content, task: Task, after: Task) -> Task | None:
+    """Make ``task`` wait for ``after`` (the UI's ``a``).
+
+    Unknown ids and dependency cycles are refused by ``_check_task_links``,
+    leaving the file as it was. Returns None if the edge was already there.
+    """
+    if after.id == task.id:
+        raise ValidationError(f"{task.id} can't depend on itself")
+    if after.id in task.depends_on:
+        return None
+    edited = set_fields(content, task, {"depends_on": [*task.depends_on, after.id]})
+    return edited if isinstance(edited, Task) else None
+
+
+def remove_dep(content: Content, task: Task, after: Task) -> Task | None:
+    """Drop ``after`` from ``task``'s dependencies (the UI's ``A``).
+    Returns None if ``task`` didn't depend on it."""
+    if after.id not in task.depends_on:
+        return None
+    rest = [d for d in task.depends_on if d != after.id]
+    edited = set_fields(content, task, {"depends_on": rest or None})
+    return edited if isinstance(edited, Task) else None
+
+
 # --- subtasks & updates -----------------------------------------------------------
 
 
@@ -972,7 +1177,14 @@ def check_subtasks(
     return _fresh(content, task)
 
 
-def add_subtask(content: Content, task: Task, text: str, *, today: dt.date | None = None) -> Task:
+def add_subtask(
+    content: Content,
+    task: Task,
+    text: str,
+    *,
+    today: dt.date | None = None,
+    extra_paths: Iterable[Path] = (),
+) -> Task:
     """Append an unchecked ``- [ ] text`` item to the task's ``## Subtasks``."""
     git_sync.require_repo(content.root)
     line = one_line(text, "subtask")
@@ -980,7 +1192,9 @@ def add_subtask(content: Content, task: Task, text: str, *, today: dt.date | Non
     body = ensure_section(body, SUBTASKS_HEADING, before=(IDEAS_HEADING, UPDATES_HEADING))
     body = append_to_section(body, SUBTASKS_HEADING, f"- [ ] {line}")
     task.path.write_text(set_frontmatter_key(body, "updated", today or dates.local_today()))
-    git_sync.commit(content.root, f"task: subtask {task.id}: {summary(line)}", [task.path])
+    git_sync.commit(
+        content.root, f"task: subtask {task.id}: {summary(line)}", [task.path, *extra_paths]
+    )
     return _fresh(content, task)
 
 
