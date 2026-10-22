@@ -145,6 +145,13 @@ def test_task_detail_lists_subtasks_as_selectable_lines(demo_repo):
     assert "[x] Toy model" in text and "[ ] Hierarchical model" in text
 
 
+def test_task_without_subtasks_says_what_to_do(demo_repo):
+    content = Content.open(demo_repo)
+    assert "No subtasks · o add one" in plain(
+        model.task_detail(content, content.task("enter-grades"))
+    )
+
+
 def test_marking_a_row_survives_a_two_column_grid():
     row = model.Row("k", "task", model.two_columns(model.dim("hello"), model.dim("2")))
     row.mark()

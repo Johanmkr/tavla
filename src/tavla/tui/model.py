@@ -645,6 +645,9 @@ def task_detail(content: Content, task: Task, *, now: dt.datetime | None = None)
             mark = Text("[x]", style="dim green") if s.done else Text("[ ]", style="bold")
             text = Text.assemble("  ", mark, " ", (s.text, "dim" if s.done else ""))
             lines.append(Line(text, subtask=s, key=f"sub:{s.number}"))
+    elif task.status != TaskStatus.DONE:
+        lines.append(Line(Text("")))
+        lines.append(Line(dim("No subtasks · o add one · W open a terminal · e edit")))
 
     sessions = focus.sessions(task)
     current = focus.current(content)
