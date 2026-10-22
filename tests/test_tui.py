@@ -602,6 +602,22 @@ def test_narrow_drops_the_goal_column_and_says_so(demo_repo):
     assert sixty["breadcrumb"][0] == "thesis"
 
 
+def test_selected_row_has_a_bar_bright_in_the_focused_column(demo_repo):
+    seen: dict[str, object] = {}
+
+    def look(app):
+        for name in ("list", "mid"):
+            column = app.column(name)
+            lines = [column.render_line(y) for y in range(2)]
+            seen[name] = [line.text[0] for line in lines]
+            seen[name + " colour"] = lines[0]._segments[0].style.color
+
+    drive(demo_repo, to_thesis, "enter", look)
+    assert seen["list"] == ["▌", " "]
+    assert seen["mid"] == ["▌", " "]
+    assert seen["list colour"] != seen["mid colour"]  # dim where focus isn't
+
+
 def test_tiny_layout_asks_for_a_bigger_window(demo_repo):
     seen = drive(demo_repo, size=(30, 10))
     assert "tiny" in seen["classes"]

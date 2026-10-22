@@ -155,5 +155,7 @@ Below 40×12 it asks for a bigger window.
 ![The same view at 80 columns: the goal column is gone, the breadcrumb names it](../assets/tui-narrow.svg)
 
 Colours come from your terminal's own palette, so it matches your theme, light
-or dark. `NO_COLOR` is respected; focus and selection are still shown by the
-bold column title and the reversed row.
+or dark. The row you are on is reversed and has a `▌` bar at its left edge, in
+the accent colour in the column you are in and dim in the others, so you can
+still see where you came from. `NO_COLOR` is respected; focus and selection
+are still shown by the bold column title, the bar and the reversed row.

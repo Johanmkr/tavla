@@ -75,6 +75,8 @@ once (see Upgrading).
   longer unticks a finished one by accident.
 - Pickers in `tavla ui` (project, move, after, people, …) filter as you type,
   and the project picker indents subprojects under their parent.
+- The selected row in `tavla ui` has a `▌` bar at its left edge: the accent
+  colour in the focused column, dim in the others.
 
 ### Changes
 - tavla now depends on Textual (for `tavla ui`); other commands don't load it.

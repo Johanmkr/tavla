@@ -58,7 +58,7 @@ from tavla.core.ops import EditSession
 from tavla.core.store import Content
 from tavla.tui import model
 from tavla.tui.model import Context, Row
-from tavla.tui.screens import Confirm, FlowScreen, Help, ListScreen, Picker, Prompt
+from tavla.tui.screens import BarList, Confirm, FlowScreen, Help, ListScreen, Picker, Prompt
 
 POLL_SECONDS = 2.0
 STATUS_EVERY = 30.0  # refresh the work timer and alerts this often
@@ -109,7 +109,7 @@ JobResult = Outcome | None
 Job = Callable[[Content], JobResult]
 
 
-class Column(OptionList):
+class Column(BarList):
     """One column: a list of :class:`Row` s that keeps its selection by key
     across reloads."""
 
@@ -261,6 +261,8 @@ class TavlaApp(App[None]):
         background: ansi_default; color: ansi_default; text-style: underline;
     }
     .column:focus > .option-list--option-highlighted { text-style: reverse bold; }
+    .column > .bar-list--bar { color: ansi_bright_black; background: ansi_default; }
+    .column:focus > .bar-list--bar { color: $accent; text-style: bold; }
     .column > .option-list--option-disabled { color: ansi_default; text-style: none; }
     .column > .option-list--option-hover { background: ansi_default; }
     #header, #hints { height: 1; padding: 0 1; }
@@ -627,7 +629,7 @@ class TavlaApp(App[None]):
         """The rightmost column: the detail of the row the cursor is on."""
         row = self.source_row()
         today = dates.local_today()
-        width = max(self.preview().size.width - 3, 20)
+        width = max(self.preview().size.width - 4, 20)  # border, bar, scrollbar
         lines: list[model.Line] = []
         title = "Preview"
         if row is not None:

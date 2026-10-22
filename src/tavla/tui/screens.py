@@ -6,12 +6,14 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
+from rich.segment import Segment
 from rich.table import Table
 from rich.text import Text
 from textual.app import ComposeResult
 from textual.binding import Binding, BindingType
 from textual.containers import Vertical, VerticalScroll
 from textual.screen import ModalScreen
+from textual.strip import Strip
 from textual.widgets import Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -34,7 +36,32 @@ ModalScreen { align: center middle; background: transparent; }
     background: $background; color: $foreground; text-style: reverse bold;
 }
 #dialog OptionList > .option-list--option-hover { background: $background; }
+#dialog BarList > .bar-list--bar { color: $accent; background: $background; text-style: bold; }
 """
+
+
+class BarList(OptionList):
+    """An option list whose selected row also has a bar in a one-cell left
+    gutter, so the row you are on stands out more than reverse video alone
+    (the accent colour where the list has focus, dim elsewhere: see the CSS)."""
+
+    COMPONENT_CLASSES: ClassVar[set[str]] = {"bar-list--bar"}
+    BAR = "▌"
+
+    def _get_left_gutter_width(self) -> int:
+        return len(self.BAR)
+
+    def render_line(self, y: int) -> Strip:
+        strip = super().render_line(y)
+        try:
+            index, _ = self._lines[self.scroll_offset.y + y]
+        except IndexError:
+            return strip  # below the last row: already full width
+        if index == self.highlighted and not self.options[index].disabled:
+            gutter = Segment(self.BAR, self.get_component_rich_style("bar-list--bar"))
+        else:
+            gutter = Segment(" ")
+        return Strip([gutter, *strip], strip.cell_length + 1)
 
 
 class Prompt(ModalScreen[str | None]):
@@ -85,7 +112,7 @@ class Picker(ModalScreen[str | None]):
         with Vertical(id="dialog"):
             yield Label(Text(self.question, style="bold"))
             yield Input(placeholder="type to filter", id="filter")
-            yield OptionList(id="choices")
+            yield BarList(id="choices")
             yield Label("↑ ↓ move · enter choose · esc clear / cancel", classes="hint")
 
     def on_mount(self) -> None:
@@ -94,8 +121,8 @@ class Picker(ModalScreen[str | None]):
         self.query_one("#filter", Input).focus()
 
     @property
-    def choices(self) -> OptionList:
-        return self.query_one("#choices", OptionList)
+    def choices(self) -> BarList:
+        return self.query_one("#choices", BarList)
 
     def matching(self, text: str) -> list[tuple[str, str]]:
         """The options with every word of ``text`` in their key, label or
