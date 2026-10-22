@@ -135,11 +135,14 @@ uv run --extra docs mkdocs serve
   with `--8<-- "model.mmd"` inside a `mermaid` block. The README can't
   include files, so it carries a copy of `model.mmd`; a test fails if they
   drift apart.
-- **The terminal recording** (`docs/assets/demo.gif`) comes from
-  `docs/assets/demo.tape`. After changing what those commands print,
-  re-record it from the repo root with [vhs](https://github.com/charmbracelet/vhs):
+- **The terminal recordings** (`docs/assets/demo.gif` for the CLI,
+  `docs/assets/tui.gif` for `tv ui`) come from `docs/assets/demo.tape` and
+  `docs/assets/tui.tape`. After changing what they show, re-record them from
+  the repo root with [vhs](https://github.com/charmbracelet/vhs):
   `vhs docs/assets/demo.tape`. (If Chromium can't start its sandbox, as on
   recent Ubuntu, prefix `VHS_NO_SANDBOX=true`.)
+- **The `tv ui` screenshots** (`docs/assets/tui-wide.svg`, `tui-narrow.svg`)
+  come from `uv run python docs/assets/screenshots.py`.
 - Example output in the guide comes from the demo content. Update it when
   the output changes.
 
