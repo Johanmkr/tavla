@@ -64,7 +64,7 @@ in the help:
 | `@a` `@d` `@m` `@l` | people: add · remove · mail · list |
 | `/` | filter every column at once (`esc` clears) |
 | `f` | flow board, full screen (`f` again: the same cards by status) |
-| `P` | pick the project |
+| `P` | pick the project (subprojects are indented under their parent) |
 | `r`, `ctrl-p`, `q` | reload, command palette (themes), quit |
 
 ## Symbols
@@ -82,6 +82,12 @@ in the help:
 | `▣` | open task terminals (`W`) |
 
 `?` lists them too.
+
+Every picker (`P`, `m`, `p`, `a`, `@a`, …) filters as you type: `rel` keeps
+the rows whose id or title contains it, and a subproject also matches its
+parent's id. `↑`/`↓` (or `ctrl-n`/`ctrl-p`) move, `enter` takes the highlighted
+row, and `esc` clears what you typed, then closes. Letters are always text
+there, so `j` and `k` don't move.
 
 ## Marking several rows
 

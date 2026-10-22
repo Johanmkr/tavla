@@ -622,6 +622,44 @@ def test_project_picker_switches_project(demo_repo):
     assert seen["project"] == "teaching"
 
 
+def picker_ids(app: TavlaApp) -> list[str]:
+    return [str(o.id) for o in app.screen.query_one("#choices").options if not o.disabled]
+
+
+def test_typing_in_a_picker_filters_it(demo_repo):
+    seen: dict[str, list[str]] = {}
+
+    def look(name):
+        return lambda app: seen.__setitem__(name, picker_ids(app))
+
+    drive(demo_repo, "P", look("all"), "type:teach", look("teach"), "type:zzz", look("none"))
+    assert len(seen["all"]) > 1
+    assert seen["teach"] == ["teaching"]
+    assert seen["none"] == []
+
+
+def test_picker_enter_takes_the_first_match_and_esc_clears_first(demo_repo):
+    seen = drive(demo_repo, "P", "type:teach", "enter")
+    assert seen["project"] == "teaching"
+    seen = drive(demo_repo, "P", "type:teach", "escape")
+    assert seen["screen"] == "Picker"
+    assert drive(demo_repo, "P", "type:teach", "escape", "escape")["screen"] != "Picker"
+
+
+def test_picker_letters_filter_and_arrows_move(demo_repo):
+    # j and k are text here: they don't move the cursor
+    seen: dict[str, object] = {}
+    drive(
+        demo_repo,
+        "P",
+        "down",
+        lambda app: seen.__setitem__("at", app.screen.query_one("#choices").highlighted),
+        "type:j",
+        lambda app: seen.__setitem__("typed", app.screen.query_one("#filter").value),
+    )
+    assert seen == {"at": 1, "typed": "j"}
+
+
 def test_filter_keeps_the_parent_of_a_matching_task(demo_repo):
     def set_filter(app):
         to_thesis(app)

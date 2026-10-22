@@ -16,7 +16,7 @@ from __future__ import annotations
 import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
@@ -1082,7 +1082,7 @@ class TavlaApp(App[None]):
         self.push_screen(Prompt(question, value, hint), done)
 
     def pick(
-        self, question: str, options: list[tuple[str, str]], then: Callable[[str], None]
+        self, question: str, options: Sequence[tuple[str, ...]], then: Callable[[str], None]
     ) -> None:
         if not options:
             self.nothing("Nothing to choose from")
@@ -1907,11 +1907,23 @@ class TavlaApp(App[None]):
         if not projects:
             self.nothing("No projects yet")
             return
+        parents = {p.id: p.parent for p in projects}
+
+        def ancestors(project_id: str) -> list[str]:
+            out = []
+            while (project_id := parents.get(project_id) or "") and project_id not in out:
+                out.append(project_id)
+            return out
+
+        # Subprojects indent under their parent, and typing the parent's id
+        # finds them too.
         options = [
             (
                 p.id,
-                f"{p.id}  ({p.title})"
+                "  " * len(ancestors(p.id))
+                + f"{p.id}  ({p.title})"
                 + (f" {model.PROJECT_MARKS[p.status]}" if model.PROJECT_MARKS[p.status] else ""),
+                " ".join(ancestors(p.id)),
             )
             for p in projects
         ]

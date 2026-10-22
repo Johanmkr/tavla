@@ -73,6 +73,8 @@ once (see Upgrading).
   overdue, blocked or stale item, and blocked tasks are listed in the agenda.
   Moving into the preview lands on the first open subtask, so `space` no
   longer unticks a finished one by accident.
+- Pickers in `tavla ui` (project, move, after, people, …) filter as you type,
+  and the project picker indents subprojects under their parent.
 
 ### Changes
 - tavla now depends on Textual (for `tavla ui`); other commands don't load it.

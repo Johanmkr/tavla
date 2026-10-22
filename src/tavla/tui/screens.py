@@ -3,7 +3,7 @@ read-only list, the full-screen flow board, and the key help."""
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any, ClassVar
 
 from rich.table import Table
@@ -26,9 +26,10 @@ ModalScreen { align: center middle; background: transparent; }
 #dialog Input { border: none; height: 1; padding: 0; background: $background; }
 #dialog .hint { color: $text-muted; }
 #dialog OptionList {
-    border: none; background: $background; height: auto; max-height: 60%;
+    border: none; background: $background; height: auto; max-height: 70vh;
     scrollbar-size-vertical: 1;
 }
+#choices { text-wrap: nowrap; text-overflow: ellipsis; }
 #dialog OptionList > .option-list--option-highlighted {
     background: $background; color: $foreground; text-style: reverse bold;
 }
@@ -63,50 +64,89 @@ class Prompt(ModalScreen[str | None]):
 
 
 class Picker(ModalScreen[str | None]):
-    """Choose one of ``options`` — ``(key, label)`` pairs — or Esc for None."""
+    """Choose one of ``options`` — ``(key, label)`` pairs, or ``(key, label,
+    also)`` where ``also`` is more text the filter matches (a subproject's
+    parent) — or Esc for None. Typing filters the list."""
 
     DEFAULT_CSS = MODAL_CSS
     BINDINGS: ClassVar[list[BindingType]] = [
         Binding("escape", "cancel", "Cancel", show=False),
-        Binding("j,down", "cursor_down", show=False),
-        Binding("k,up", "cursor_up", show=False),
-        Binding("g", "first", show=False),
-        Binding("G", "last", show=False),
+        Binding("down,ctrl+n", "cursor_down", show=False, priority=True),
+        Binding("up,ctrl+p", "cursor_up", show=False, priority=True),
+        Binding("pagedown", "page_down", show=False, priority=True),
+        Binding("pageup", "page_up", show=False, priority=True),
     ]
 
-    def __init__(self, question: str, options: list[tuple[str, str]]) -> None:
+    def __init__(self, question: str, options: Sequence[tuple[str, ...]]) -> None:
         super().__init__()
-        self.question, self.options = question, options
+        self.question, self.options = question, list(options)
 
     def compose(self) -> ComposeResult:
         with Vertical(id="dialog"):
             yield Label(Text(self.question, style="bold"))
-            yield OptionList(
-                *(Option(label, id=key) for key, label in self.options),
-                id="choices",
-            )
-            yield Label("enter choose · esc cancel", classes="hint")
+            yield Input(placeholder="type to filter", id="filter")
+            yield OptionList(id="choices")
+            yield Label("↑ ↓ move · enter choose · esc clear / cancel", classes="hint")
 
     def on_mount(self) -> None:
-        self.query_one("#choices", OptionList).focus()
+        self.choices.can_focus = False  # typing always goes to the filter
+        self.refill("")
+        self.query_one("#filter", Input).focus()
+
+    @property
+    def choices(self) -> OptionList:
+        return self.query_one("#choices", OptionList)
+
+    def matching(self, text: str) -> list[tuple[str, str]]:
+        """The options with every word of ``text`` in their key, label or
+        extra text, ignoring case."""
+        words = text.lower().split()
+        return [
+            (option[0], option[1])
+            for option in self.options
+            if all(w in " ".join(option).lower() for w in words)
+        ]
+
+    def refill(self, text: str) -> None:
+        choices = self.choices
+        shown = self.matching(text)
+        choices.clear_options()
+        if shown:
+            choices.add_options([Option(label, id=key) for key, label in shown])
+            choices.highlighted = 0
+        else:
+            choices.add_option(Option(Text("nothing matches", style="dim italic"), disabled=True))
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        self.refill(event.value)
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        option = self.choices.highlighted_option
+        if option is not None and not option.disabled:
+            self.dismiss(str(option.id))
 
     def action_cursor_down(self) -> None:
-        self.query_one("#choices", OptionList).action_cursor_down()
+        self.choices.action_cursor_down()
 
     def action_cursor_up(self) -> None:
-        self.query_one("#choices", OptionList).action_cursor_up()
+        self.choices.action_cursor_up()
 
-    def action_first(self) -> None:
-        self.query_one("#choices", OptionList).action_first()
+    def action_page_down(self) -> None:
+        self.choices.action_page_down()
 
-    def action_last(self) -> None:
-        self.query_one("#choices", OptionList).action_last()
+    def action_page_up(self) -> None:
+        self.choices.action_page_up()
 
     def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
         self.dismiss(str(event.option.id))
 
     def action_cancel(self) -> None:
-        self.dismiss(None)
+        """Esc clears the filter first, then closes."""
+        typed = self.query_one("#filter", Input)
+        if typed.value:
+            typed.value = ""
+        else:
+            self.dismiss(None)
 
 
 class Confirm(ModalScreen[bool]):
@@ -313,7 +353,7 @@ HELP = [
             ("/", "filter every column at once (esc clears)"),
             ("i", "next item behind the header's alerts: overdue, blocked, stale"),
             ("f", "flow board, full screen (f again: by status, enter: jump to a card)"),
-            ("P", "pick the project"),
+            ("P", "pick the project (every picker filters as you type)"),
             ("r", "reload now (it also reloads when the repo changes)"),
             ("ctrl-p", "command palette (themes, …)"),
             ("?  q  ctrl-c", "this help · quit"),
