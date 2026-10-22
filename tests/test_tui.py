@@ -575,6 +575,18 @@ def test_work_and_pause(demo_repo, git):
     assert last_commit(git, demo_repo).startswith("focus: pause run-baseline")
 
 
+def test_preview_cursor_lands_on_the_first_open_subtask(demo_repo, git):
+    def pick(app):
+        app.column("list").focus()
+        app.column("list").select_key("task:run-baseline")
+
+    before = Content.open(demo_repo).task("run-baseline").subtasks
+    assert [s.done for s in before[:3]] == [True, True, False]
+    drive(demo_repo, "2", pick, "l", "space")
+    after = Content.open(demo_repo).task("run-baseline").subtasks
+    assert [s.done for s in after[:3]] == [True, True, True]
+
+
 def test_shift_w_opens_a_task_terminal(demo_repo, git, monkeypatch):
     from tavla.core import terminal
 

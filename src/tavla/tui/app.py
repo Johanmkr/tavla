@@ -173,7 +173,11 @@ class Column(OptionList):
             wanted = next((n for n in enabled if rows[n].key == keep), None)
             if wanted is not None:
                 self.wanted = None  # found: nothing left to wait for
-            self.highlighted = wanted if wanted is not None else (enabled[0] if enabled else None)
+            self.highlighted = wanted if wanted is not None else self.first_row(enabled)
+
+    def first_row(self, enabled: list[int]) -> int | None:
+        """The row to land on when no row was selected before."""
+        return enabled[0] if enabled else None
 
     def select_key(self, key: str) -> bool:
         """Select ``key``, or remember it until a reload brings the row in
@@ -227,6 +231,12 @@ class PreviewColumn(Column):
 
     def _selectable(self) -> bool:
         return any(not r.disabled for r in self.rows)
+
+    def first_row(self, enabled: list[int]) -> int | None:
+        """The first open subtask, so `space` never unticks finished work by
+        accident; the first line when they are all ticked."""
+        open_ = (n for n in enabled if not getattr(self.rows[n].ref, "done", False))
+        return next(open_, enabled[0] if enabled else None)
 
     def action_cursor_down(self) -> None:
         super().action_cursor_down() if self._selectable() else self.scroll_down(animate=False)
