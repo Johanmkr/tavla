@@ -432,6 +432,14 @@ def inbox_rows(content: Content, *, today: dt.date) -> list[Row]:
     return rows
 
 
+def alert_keys(report: queries.StatusReport) -> list[str]:
+    """The agenda rows behind the header's alerts, in the order `i` visits
+    them: overdue, blocked, stale."""
+    overdue = [f"due:{t.id}" for t in report.due_tasks if t.due and t.due < report.today]
+    blocked = [f"blocked:{t.id}" for t in report.blocked]
+    return overdue + blocked + [f"stale:{s.project.id}" for s in report.stale]
+
+
 def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = None) -> list[Row]:
     """The agenda: the health report, today's chores, then everything dated.
 
@@ -450,6 +458,19 @@ def agenda_rows(content: Content, *, today: dt.date, now: dt.datetime | None = N
                 two_columns(Text.assemble(("☾ ", "dim"), stale.project.title), dim(idle)),
                 ref=stale.project,
                 search=f"{stale.project.id} {stale.project.title} stale",
+                column="list",
+            )
+        )
+    for task in report.blocked:
+        rows.append(
+            Row(
+                f"blocked:{task.id}",
+                "task",
+                two_columns(
+                    Text.assemble(marker(CardState.BLOCKED), " ", task.title), dim("blocked")
+                ),
+                ref=task,
+                search=f"{task.id} {task.title} blocked",
                 column="list",
             )
         )

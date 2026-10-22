@@ -316,6 +316,29 @@ def test_narrow_header_keeps_the_breadcrumb_and_shortens_alerts(demo_repo):
     assert "!1 ✗1" in text and "overdue" not in text
 
 
+def test_i_visits_the_alerts_in_the_agenda(demo_repo):
+    first = drive(demo_repo, "i")
+    assert first["scope"] == "agenda"
+    report = queries.status(Content.open(demo_repo))
+    keys = model.alert_keys(report)
+    assert len(keys) >= 2 and keys[0].startswith("due:")
+    seen: list[str] = []
+
+    def grab(app):
+        seen.append(app.column("list").current.key)
+
+    drive(demo_repo, "i", grab, "i", grab)
+    assert seen == keys[:2]
+
+
+def test_blocked_tasks_show_in_the_agenda(demo_repo):
+    report = queries.status(Content.open(demo_repo))
+    rows = model.agenda_rows(Content.open(demo_repo), today=report.today)
+    assert [r.key for r in rows if r.key.startswith("blocked:")] == [
+        f"blocked:{t.id}" for t in report.blocked
+    ]
+
+
 def test_scope_keys_and_tab_switch(demo_repo):
     assert drive(demo_repo, "3")["scope"] == "inbox"
     assert drive(demo_repo, "4")["scope"] == "agenda"

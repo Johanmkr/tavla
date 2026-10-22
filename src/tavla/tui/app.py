@@ -92,7 +92,7 @@ HINTS = {
     ("agenda", "preview"): "space tick  o subtask  e edit  esc back",
 }
 # Keys that work everywhere, added to the hint line while they fit.
-COMMON_HINTS = ("v mark", "/ filter", "f board", "@ people")
+COMMON_HINTS = ("i alerts", "v mark", "/ filter", "f board", "@ people")
 MARK_HINT = "j k extend marks  space done all  V mark column  esc leave  "
 
 
@@ -290,6 +290,7 @@ class TavlaApp(App[None]):
         Binding("s", "start", show=False),
         Binding("w", "work", show=False),
         Binding("W", "terminal", show=False),
+        Binding("i", "alert", show=False),
         Binding("n", "note", show=False),
         Binding("o", "add_here", show=False),
         Binding("O", "add_above", show=False),
@@ -905,6 +906,21 @@ class TavlaApp(App[None]):
         self.reload()
         if self.column("list").display:
             self.column("list").focus()
+
+    def action_alert(self) -> None:
+        """`i`: the next item behind the header's alerts (overdue, blocked,
+        stale), in the agenda."""
+        report = self._status_report()
+        keys = model.alert_keys(report) if report is not None else []
+        if not keys:
+            self.nothing("Nothing overdue, blocked or stale")
+            return
+        self.action_scope("agenda")
+        column = self.column("list")
+        current = column.current.key if column.current else None
+        after = keys.index(current) + 1 if current in keys else 0
+        column.select_key(keys[after % len(keys)])
+        column.focus()
 
     def action_next_scope(self, delta: int) -> None:
         self.action_scope(SCOPES[(SCOPES.index(self.scope) + delta) % len(SCOPES)])

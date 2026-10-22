@@ -311,6 +311,7 @@ HELP = [
             ("v", "mark a row; j/k extend, space and friends then act on all marks"),
             ("V", "mark the whole column · with nothing marked: show done and paused"),
             ("/", "filter every column at once (esc clears)"),
+            ("i", "next item behind the header's alerts: overdue, blocked, stale"),
             ("f", "flow board, full screen (f again: by status, enter: jump to a card)"),
             ("P", "pick the project"),
             ("r", "reload now (it also reloads when the repo changes)"),
