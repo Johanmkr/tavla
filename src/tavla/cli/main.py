@@ -43,7 +43,7 @@ from tavla.core.errors import EXIT_INVALID, TavlaError
 
 app = typer.Typer(
     name="tavla",
-    help="Research operations: projects, tasks, deliverables and reading, in plain text + git.",
+    help="Research operations: projects, goals, tasks, ideas and deliverables, in plain text + git.",
     invoke_without_command=True,
     context_settings=HELP_SETTINGS,
 )

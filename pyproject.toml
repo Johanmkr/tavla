@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "tavla"
 dynamic = ["version"]
-description = "CLI-first, git-native research operations tool: projects, tasks, deliverables and reading material."
+description = "CLI-first, git-native research operations tool: projects, goals, tasks, ideas and deliverables, with a full-screen view."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
