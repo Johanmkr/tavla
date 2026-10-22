@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -214,7 +215,7 @@ def _wrapper(content: Content, shell: str, *extra: str) -> subprocess.Popen[byte
 
 
 def test_session_wrapper_finishes_when_shell_exits(content):
-    proc = _wrapper(content, "/bin/true", "draft-related-work")
+    proc = _wrapper(content, shutil.which("true"), "draft-related-work")  # /usr/bin on macOS
     out, _ = proc.communicate(timeout=60)
     assert proc.returncode == 0
     assert b"Closing this terminal marks it done" in out
