@@ -37,6 +37,11 @@ once (see Upgrading).
   and `promote` (into a task or goal) manage them. `status` counts open
   todos.
 - `tavla check` reports a `focus.yaml` that names an unknown task.
+- `tavla project pause|resume|done|archive ID` change a project's status, and
+  `tavla project drop ID` deletes a project (refused while it has
+  subprojects or tasks elsewhere depend on it; `--force` when it still has
+  goals, tasks or deliverables). In `tavla ui`, `space`, `x`, `s` and `D` work
+  on subproject rows too.
 - Goals and tasks can list the people involved, with email addresses
   (issue #22), in a `people:` list in the frontmatter. `--person` on `add`
   and `edit` takes `Name <email>`, an address or a name. A piece of the name

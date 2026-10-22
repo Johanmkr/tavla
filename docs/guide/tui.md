@@ -48,8 +48,8 @@ in the help:
 
 | Key | What it does |
 |---|---|
-| `space` | done (goals, tasks, todos, and a subtask in the preview; an idea: done already, removed) |
-| `x` | reopen — vim's `x` deletes a character |
+| `space` | done (goals, tasks, subprojects, todos, and a subtask in the preview; an idea: done already, removed) |
+| `x` | reopen (a subproject: active again) — vim's `x` deletes a character |
 | `s` | start: mark doing |
 | `w` | work on the task (`tv work`); on the task you are working on, pause |
 | `i` | jump to the next overdue, blocked or stale item (in the agenda) |
@@ -62,7 +62,7 @@ in the help:
 | `m` | move to another project or goal (only reachable homes are offered) |
 | `p` | promote an idea or chore to a task (scope 3); elsewhere it pastes nothing |
 | `T` | triage: empty the inbox one item at a time (see below) |
-| `D` | drop (asks first; refused while other tasks depend on it) |
+| `D` | drop (asks first; refused while other tasks depend on it). A subproject goes with its goals and tasks, and the question counts them |
 | `u` | undo the last change (asks, and names it) |
 | `v` / `V` | mark a row / mark the whole column · with no marks: show done items |
 | `J` / `K` | move the row down / up — writes `order:` (see below) |

@@ -794,6 +794,28 @@ def test_subprojects_are_listed_and_open_with_enter(demo_repo):
     assert seen["current"]["list"] == "sub:ablations"
 
 
+def test_space_and_x_on_a_subproject_finish_and_reopen_it(demo_repo, git):
+    drive(demo_repo, to_thesis, "space")
+    assert last_commit(git, demo_repo) == "project: done ablations"
+    assert Content.open(demo_repo).project("ablations").status == "done"
+    drive(demo_repo, to_thesis, "x")
+    assert last_commit(git, demo_repo) == "project: reopen ablations"
+    assert Content.open(demo_repo).project("ablations").status == "active"
+
+
+def test_d_drops_a_subproject_with_what_is_in_it(demo_repo, git):
+    content = Content.open(demo_repo)
+    tasks = len(content.tasks(content.project("ablations")))
+
+    def question(app):
+        assert app.screen.question.startswith("Drop project ablations with")
+        assert f"{tasks} tasks" in app.screen.question
+
+    drive(demo_repo, to_thesis, "D", question, "y")
+    assert last_commit(git, demo_repo) == "project: drop ablations"
+    assert not (demo_repo / "projects" / "thesis" / "subprojects" / "ablations").exists()
+
+
 def test_tiny_layout_asks_for_a_bigger_window(demo_repo):
     seen = drive(demo_repo, size=(30, 10))
     assert "tiny" in seen["classes"]

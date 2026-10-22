@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import datetime as dt
 import re
+import shutil
 import unicodedata
 from collections.abc import Iterable, Sequence
 from pathlib import Path
@@ -794,6 +795,68 @@ def set_project_fields(
     )
     content.refresh()
     return edited
+
+
+def set_project_status(
+    content: Content, project: Project, status: ProjectStatus, *, verb: str | None = None
+) -> Project | None:
+    """Change a project's status. Returns None if it already has that status."""
+    if project.status == status:
+        return None
+    return set_project_fields(
+        content,
+        project,
+        {"status": status.value},
+        message=f"project: {verb or status.value} {project.id}",
+    )
+
+
+def check_project_droppable(content: Content, project: Project, *, force: bool = False) -> None:
+    """Raise ValidationError unless ``project`` can be deleted: it has no
+    subprojects, nothing outside it depends on its tasks, you are not working
+    on one of them, and (unless ``force``) it holds no goals, tasks or
+    deliverables."""
+    children = content.children(project)
+    if children:
+        ids = ", ".join(c.id for c in children)
+        raise ValidationError(
+            f"project '{project.id}' has subprojects ({ids}); move or drop them first"
+        )
+    tasks = content.tasks(project)
+    inside = {t.id for t in tasks}
+    working = focus.current(content)
+    if working is not None and working.task_id in inside:
+        raise ValidationError(f"you are working on '{working.task_id}'; `tv pause` first")
+    outside = [t.id for t in content.tasks() if t.id not in inside and set(t.depends_on) & inside]
+    if outside:
+        raise ValidationError(
+            f"tasks in other projects depend on '{project.id}' ({', '.join(outside)}); "
+            "remove the dependencies first"
+        )
+    if force:
+        return
+    goals, deliverables = content.goals(project), content.deliverables(project)
+    if goals or tasks or deliverables:
+        what = ", ".join(
+            f"{len(items)} {name}"
+            for items, name in ((goals, "goals"), (tasks, "tasks"), (deliverables, "deliverables"))
+            if items
+        )
+        raise ValidationError(
+            f"project '{project.id}' still has {what}; drop them first, or use --force"
+        )
+
+
+def drop_project(content: Content, project: Project, *, force: bool = False) -> None:
+    """Delete a project's folder (it stays in git history; ``tv undo`` brings
+    it back). See :func:`check_project_droppable` for when it is refused."""
+    git_sync.require_repo(content.root)
+    check_project_droppable(content, project, force=force)
+    shutil.rmtree(project.path)
+    content.refresh()
+    registry = sync_registry(content)
+    git_sync.commit(content.root, f"project: drop {project.id}", [project.path, registry])
+    content.refresh()
 
 
 def stored_folder(folder: Path) -> str:

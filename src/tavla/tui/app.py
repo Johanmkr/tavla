@@ -51,6 +51,7 @@ from tavla.core.entities import (
     Goal,
     Priority,
     Project,
+    ProjectStatus,
     Task,
     TaskStatus,
 )
@@ -1157,7 +1158,7 @@ class TavlaApp(App[None]):
 
             self.write(tick)
             return
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo", "idea")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in _DONEABLE]
         if not rows:
             self.nothing("Nothing to mark done here")
             return
@@ -1191,6 +1192,13 @@ class TavlaApp(App[None]):
             if row.kind == "idea":
                 ideas.drop(c, _fresh_idea(c, row.ref), done=True)
                 return Outcome(f"Done: {row.ref.idea.text}", at=position)
+            if row.kind in ("project", "subproject"):
+                project = c.project(row.ref.id)
+                if project.status == ProjectStatus.DONE:
+                    ops.set_project_status(c, project, ProjectStatus.ACTIVE, verb="reopen")
+                    return Outcome(f"Reopened {project.id}", select=("list", row.key))
+                ops.set_project_status(c, project, ProjectStatus.DONE, verb="done")
+                return Outcome(f"Done: {project.id}", at=position)
             if row.kind == "goal":
                 goal = c.goal(row.ref.id)
                 if ops.complete(c, goal) is None:
@@ -1205,9 +1213,9 @@ class TavlaApp(App[None]):
         self.write(job)
 
     def action_reopen(self) -> None:
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in _REOPENABLE]
         if not rows:
-            self.nothing("Select a task or goal to reopen")
+            self.nothing("Select a task, goal or project to reopen")
             return
         if len(rows) > 3:
             self.confirm(
@@ -1221,6 +1229,11 @@ class TavlaApp(App[None]):
         def job(c: Content) -> JobResult:
             reopened = []
             for row in rows:
+                if row.kind in ("project", "subproject"):
+                    project = c.project(row.ref.id)
+                    if ops.set_project_status(c, project, ProjectStatus.ACTIVE, verb="reopen"):
+                        reopened.append(project.id)
+                    continue
                 item = c.task(row.ref.id) if row.kind == "task" else c.goal(row.ref.id)
                 if ops.set_status(c, item, TaskStatus.TODO, verb="reopen") is not None:
                     reopened.append(item.id)
@@ -1232,14 +1245,19 @@ class TavlaApp(App[None]):
         self.write(job)
 
     def action_start(self) -> None:
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in _REOPENABLE]
         if not rows:
-            self.nothing("Select a task or goal to start")
+            self.nothing("Select a task, goal or project to start")
             return
 
         def job(c: Content) -> JobResult:
             started = []
             for row in rows:
+                if row.kind in ("project", "subproject"):
+                    project = c.project(row.ref.id)
+                    if ops.set_project_status(c, project, ProjectStatus.ACTIVE, verb="resume"):
+                        started.append(project.id)
+                    continue
                 item = c.task(row.ref.id) if row.kind == "task" else c.goal(row.ref.id)
                 if ops.start(c, item) is not None:
                     started.append(item.id)
@@ -1684,7 +1702,7 @@ class TavlaApp(App[None]):
         self.pick("Promote to a task in", model.task_homes(self.content), promote)
 
     def action_drop(self) -> None:
-        rows = [r for r in self.rows_under_cursor() if r.kind in ("task", "goal", "todo", "idea")]
+        rows = [r for r in self.rows_under_cursor() if r.kind in _DONEABLE]
         if not rows:
             self.nothing("Nothing to drop here")
             return
@@ -1693,6 +1711,9 @@ class TavlaApp(App[None]):
             if row.kind in ("todo", "idea"):
                 continue
             try:
+                if row.kind in ("project", "subproject"):
+                    ops.check_project_droppable(content, content.project(row.ref.id), force=True)
+                    continue
                 ops.check_droppable(content, _item(content, row.kind, row.ref.id))
             except TavlaError as e:
                 self.show_error(e)  # refused: no question, no commit
@@ -1710,6 +1731,9 @@ class TavlaApp(App[None]):
                     elif row.kind == "idea":
                         ideas.drop(c, _fresh_idea(c, row.ref))
                         names.append(row.ref.idea.text)
+                    elif row.kind in ("project", "subproject"):
+                        ops.drop_project(c, c.project(row.ref.id), force=True)
+                        names.append(row.ref.id)
                     else:
                         ops.drop(c, _item(c, row.kind, row.ref.id))
                         names.append(row.ref.id)
@@ -1719,7 +1743,9 @@ class TavlaApp(App[None]):
             self.write(job)
 
         what = (
-            f"Drop {rows[0].ref.id}?"
+            f"Drop project {rows[0].ref.id}{_contents(content, rows[0].ref)}?"
+            if len(rows) == 1 and rows[0].kind in ("project", "subproject")
+            else f"Drop {rows[0].ref.id}?"
             if len(rows) == 1 and hasattr(rows[0].ref, "id")
             else f"Drop “{_text(rows[0])}”?"
             if len(rows) == 1
@@ -2304,8 +2330,27 @@ def _item(c: Content, kind: str, item_id: str) -> Task | Goal | Deliverable:
     return c.deliverable(item_id)
 
 
+_DONEABLE = ("task", "goal", "todo", "idea", "project", "subproject")
+_REOPENABLE = ("task", "goal", "project", "subproject")
+
+
+def _contents(c: Content, project: Project) -> str:
+    """`` with 2 goals, 5 tasks``: what dropping a project takes with it."""
+    counts = [
+        (len(c.goals(project)), "goals"),
+        (len(c.tasks(project)), "tasks"),
+        (len(c.deliverables(project)), "deliverables"),
+    ]
+    parts = [f"{n} {name}" for n, name in counts if n]
+    return f" with {', '.join(parts)}" if parts else ""
+
+
 def _complete(c: Content, row: Row) -> list[str]:
     """Mark one row done inside an existing write job."""
+    if row.kind in ("project", "subproject"):
+        project = c.project(row.ref.id)
+        done = ops.set_project_status(c, project, ProjectStatus.DONE, verb="done")
+        return [project.id] if done is not None else []
     if row.kind == "todo":
         todos.set_done(c, [_fresh_todo(c, row.ref)])
         return [row.ref.text]
