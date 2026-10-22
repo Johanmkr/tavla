@@ -10,7 +10,7 @@ rich renderable to draw.
 from __future__ import annotations
 
 import datetime as dt
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -124,6 +124,21 @@ def two_columns(left: Text, right: Text | str = "") -> RenderableType:
         right = Text(" ") + right
     grid.add_row(left, right)
     return grid
+
+
+def fit_hints(context: str, extras: Sequence[str], width: int, last: str = "? help") -> str:
+    """The hint line for ``width`` cells: the keys for where the cursor is
+    come first and are only cut when nothing else fits; then as many of the
+    always-there ``extras`` as fit, and ``last`` at the end."""
+    gap = "  "
+    room = width - len(last) - len(gap)
+    if len(context) > room:
+        return context[: max(room - 1, 0)] + "…" + gap + last
+    line = context
+    for extra in extras:
+        if len(line) + len(gap) + len(extra) <= room:
+            line = f"{line}{gap}{extra}" if line else extra
+    return f"{line}{gap}{last}" if line else last
 
 
 def mark_prompt(prompt: RenderableType) -> RenderableType:

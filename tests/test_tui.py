@@ -44,6 +44,16 @@ def plain(lines: list[model.Line]) -> str:
 # --- model ---------------------------------------------------------------------------
 
 
+def test_hints_keep_context_keys_and_drop_extras_first():
+    fit = model.fit_hints
+    assert (
+        fit("space done  s start", ["v mark", "/ filter"], 40)
+        == "space done  s start  v mark  ? help"
+    )
+    assert fit("space done  s start  w work", ["v mark"], 20) == "space done …  ? help"
+    assert fit("", ["v mark"], 30) == "v mark  ? help"
+
+
 def test_goal_column_ends_with_deliverables_and_loose(demo_repo):
     content = Content.open(demo_repo)
     rows = model.goal_column_rows(content, content.project("thesis"), today=demo.ANCHOR)

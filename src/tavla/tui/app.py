@@ -90,7 +90,8 @@ HINTS = {
     ("agenda", "list"): "enter go to item  space done  w work  o todo  / filter",
     ("agenda", "preview"): "space tick  o subtask  e edit  esc back",
 }
-COMMON_HINT = "  v mark  J K order  @ people  f board  / filter  ? help"
+# Keys that work everywhere, added to the hint line while they fit.
+COMMON_HINTS = ("v mark", "/ filter", "f board", "@ people")
 MARK_HINT = "j k extend marks  space done all  V mark column  esc leave  "
 
 
@@ -792,9 +793,9 @@ class TavlaApp(App[None]):
             hints = "@a add  @d remove  @m mail  @l list  esc cancel"
         elif self.marked or self.visual:
             hints = MARK_HINT + hints
-        self.query_one("#hints", Static).update(
-            model.two_columns(Text(hints, style="dim"), Text(COMMON_HINT, style="dim"))
-        )
+        bar = self.query_one("#hints", Static)
+        width = (bar.size.width or self.size.width) - 2
+        bar.update(Text(model.fit_hints(hints, COMMON_HINTS, width), style="dim"))
 
     # --- focus & navigation ------------------------------------------------------
 
