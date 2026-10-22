@@ -7,17 +7,19 @@ from typing import Annotated, Any
 import typer
 from typer.core import TyperGroup
 
+from tavla.cli import inbox as inbox_cli
 from tavla.cli.common import (
     ContentDirOpt,
     JsonOpt,
     complete_goal,
     complete_project,
+    complete_task,
     emit_json,
     examples,
     handles_errors,
     state,
 )
-from tavla.core import ops, todos
+from tavla.core import inbox, todos
 
 
 class _AddByDefault(TyperGroup):
@@ -151,6 +153,8 @@ def clear(ctx: typer.Context, content_dir: ContentDirOpt = None) -> None:
         "tv todo promote 3 -p thesis # a loose task in a project",
         "tv todo promote cables -g setup-env",
         "tv todo promote 4 -p thesis --as-goal",
+        "tv todo promote 2 --as-project",
+        "tv todo promote cables --subtask-of setup-cluster",
     )
 )
 @handles_errors
@@ -170,20 +174,32 @@ def promote(
     as_goal: Annotated[
         bool, typer.Option("--as-goal", help="Create a goal (needs -p) instead of a task.")
     ] = False,
+    as_project: Annotated[
+        bool,
+        typer.Option("--as-project", help="Create a project (a subproject with -p) instead."),
+    ] = False,
+    subtask_of: Annotated[
+        str | None,
+        typer.Option(
+            "--subtask-of", help="Add it as a subtask of this task.", autocompletion=complete_task
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Turn a todo into a task (under -g, or loose in -p) or a goal (--as-goal -p).
+    """Turn a todo into a task (under -g, or loose in -p), a goal (--as-goal
+    -p), a project (--as-project, under -p if given) or a subtask (--subtask-of).
 
     #tags in the todo become the new item's tags; the todo is removed.
     """
     content = state(ctx, content_dir=content_dir).content()
-    if goal is None and project is None:
-        raise typer.BadParameter("give a goal (-g) or a project (-p)")
-    item = todos.promote(
+    item = inbox.Item("todo", todos.resolve(content, ref))
+    message = inbox_cli.promote(
         content,
-        todos.resolve(content, ref),
-        project=content.project(project) if project else None,
-        goal=content.goal(goal) if goal else None,
+        item,
+        project=project,
+        goal=goal,
         as_goal=as_goal,
+        as_project=as_project,
+        subtask_of=subtask_of,
     )
-    typer.echo(f"Promoted to {ops.kind_of(item)} {item.id}: {item.title}")
+    typer.echo(message)

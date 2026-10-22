@@ -6,6 +6,7 @@ from typing import Annotated
 
 import typer
 
+from tavla.cli import inbox as inbox_cli
 from tavla.cli.common import (
     ContentDirOpt,
     JsonOpt,
@@ -18,7 +19,7 @@ from tavla.cli.common import (
     print_ideas,
     state,
 )
-from tavla.core import ideas, ops
+from tavla.core import ideas, inbox
 from tavla.core.store import Content
 
 app = typer.Typer(
@@ -174,6 +175,8 @@ def move(
     epilog=examples(
         "tv idea promote 2 -g intro # task under goal intro",
         "tv idea promote thesis:1 -p thesis --as-goal",
+        "tv idea promote grant --as-project -p thesis # a subproject",
+        "tv idea promote ess --subtask-of run-baseline",
     )
 )
 @handles_errors
@@ -185,24 +188,35 @@ def promote(
     as_goal: Annotated[
         bool, typer.Option("--as-goal", help="Create a goal (needs -p) instead of a task.")
     ] = False,
+    as_project: Annotated[
+        bool,
+        typer.Option("--as-project", help="Create a project (a subproject with -p) instead."),
+    ] = False,
+    subtask_of: Annotated[
+        str | None,
+        typer.Option(
+            "--subtask-of", help="Add it as a subtask of this task.", autocompletion=complete_task
+        ),
+    ] = None,
     content_dir: ContentDirOpt = None,
 ) -> None:
-    """Turn an idea into a task (under -g, or loose in -p) or a goal (--as-goal -p).
+    """Turn an idea into a task (under -g, or loose in -p), a goal (--as-goal
+    -p), a project (--as-project, under -p if given) or a subtask (--subtask-of).
 
     #tags in the idea become the new item's tags; the idea is removed.
     """
     content = state(ctx, content_dir=content_dir).content()
-    if goal is None and project is None:
-        raise typer.BadParameter("give a goal (-g) or a project (-p)")
-    idea = ideas.resolve(content, ref)
-    item = ideas.promote(
+    item = inbox.Item("idea", ideas.resolve(content, ref))
+    message = inbox_cli.promote(
         content,
-        idea,
-        project=content.project(project) if project else None,
-        goal=content.goal(goal) if goal else None,
+        item,
+        project=project,
+        goal=goal,
         as_goal=as_goal,
+        as_project=as_project,
+        subtask_of=subtask_of,
     )
-    typer.echo(f"Promoted to {ops.kind_of(item)} {item.id}: {item.title}")
+    typer.echo(message)
 
 
 @app.command()

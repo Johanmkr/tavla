@@ -17,6 +17,7 @@ from tavla.cli import (
     focus,
     goal,
     idea,
+    inbox,
     overview,
     people,
     project,
@@ -66,6 +67,7 @@ app.command("add", rich_help_panel=DAILY)(add.add)
 app.command("capture", rich_help_panel=DAILY)(capture.capture)
 app.command("log", rich_help_panel=DAILY)(capture.log)
 app.add_typer(todo.app, name="todo", rich_help_panel=DAILY)
+app.add_typer(inbox.app, name="inbox", rich_help_panel=DAILY)
 app.command(
     "work",
     rich_help_panel=WORKING,

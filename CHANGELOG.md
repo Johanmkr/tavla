@@ -83,6 +83,11 @@ once (see Upgrading).
   project or goal for later, marks it done or drops it.
 - The inbox in `tavla ui` also lists the ideas filed under projects, goals
   and tasks (`FILED IDEAS`), with where each one lives.
+- `tavla inbox` lists the chores and ideas waiting to be sorted (`--filed`:
+  the ideas filed under projects and goals), and `tavla inbox review` goes
+  through them one at a time with the same keys as the full-screen triage.
+  `tavla idea promote` and `tavla todo promote` can also make a project
+  (`--as-project`, a subproject with `-p`) or a subtask (`--subtask-of`).
 - `tavla ui` lists a project's subprojects at the top of its goal column:
   `enter` opens one, `h` goes back to the parent, and the breadcrumb shows
   the parents.

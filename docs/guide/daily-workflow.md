@@ -132,6 +132,8 @@ tv todo                         # list open todos, numbered
 tv todo done 2                  # tick off (by number or a piece of the text)
 tv todo reopen 2
 tv todo promote 3 -p thesis     # turn it into a task (-g for a goal's task)
+tv todo promote 3 --as-project  # or a project (-p PARENT: a subproject)
+tv todo promote 3 --subtask-of run-baseline
 tv todo drop 4
 tv todo clear                   # remove the ticked-off ones
 ```
@@ -141,6 +143,22 @@ Todos are for small chores and things you need to write down quickly. Ideas
 numbers when you tick them off, so `tv todo done 2 5` does what you expect. To
 add a todo that starts with a command word, use `tv todo add list the
 cables`. `tv status` shows how many are open.
+
+## `inbox`: emptying it
+
+```sh
+tv inbox                        # the chores and ideas waiting to be sorted
+tv inbox --filed                # ideas filed under projects, goals and tasks
+tv inbox review                 # go through them one at a time: chores, then ideas
+tv inbox review --ideas         # one kind only (--chores, --ideas, --filed)
+```
+
+`review` shows one item at a time and asks for one key: `t` task, `g` goal,
+`P` project, `s` subtask, `l` file it under a project or goal for later, `x`
+done already, `D` drop, `n` skip, `q` quit. Then it asks where (an id or a
+prefix; `?` lists them) and the title, with the item's text filled in. Each
+decision is one commit. The full-screen view does the same with `T` in the
+inbox.
 
 ## Subtasks and notes
 
@@ -286,7 +304,8 @@ tools draw as a diagram. Paste it inside a ```` ```mermaid ```` block.
     ```sh
     tv status               # stale projects, due soon, waiting
     tv flow PROJECT         # what depends on what, and what can run in parallel
-    tv idea list            # triage the inbox: move, promote or drop
-    tv todo                 # promote todos that grew into tasks; tv todo clear
+    tv inbox review         # sort the chores and ideas, one at a time
+    tv inbox review --filed # look over the ideas filed under projects
+    tv todo clear           # remove the ticked-off todos
     tv goal list            # any goals ready to close or re-plan?
     ```

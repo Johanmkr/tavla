@@ -6,7 +6,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from tavla.cli.main import app
 from tavla.core import demo, ideas, inbox, todos
 from tavla.core.errors import ValidationError
 from tavla.core.store import Content
@@ -99,3 +101,49 @@ def test_a_stale_item_is_refused(repo):
     inbox.drop(content, item)
     with pytest.raises(ValidationError):
         inbox.drop(Content.open(repo), item)
+
+
+# --- tv inbox -------------------------------------------------------------------
+
+runner = CliRunner()
+
+
+def tv(root: Path, *args: str, input: str | None = None):
+    return runner.invoke(app, ["--content-dir", str(root), *args], input=input)
+
+
+def test_tv_inbox_lists_chores_and_ideas(repo):
+    out = tv(repo, "inbox").output
+    assert "Chores (2)" in out and "Book the dentist" in out
+    assert "Ideas (3)" in out
+    assert "tv inbox review" in out
+    filed = tv(repo, "inbox", "--filed").output
+    assert "Filed ideas" in filed and "(thesis)" in filed
+
+
+def test_tv_inbox_review_goes_through_chores_then_ideas(repo):
+    keys = "x\nt\nwrite-up\nDraft the intro\nD\nn\nq\n"  # one answer per line
+    result = tv(repo, "inbox", "review", input=keys)
+    assert result.exit_code == 0, result.output
+    assert "Chores: nothing left" in result.output and "Ideas · 1 of 3" in result.output
+    content = Content.open(repo)
+    assert todos.open_todos(content) == []
+    task = next(t for t in content.tasks() if t.title == "Draft the intro")
+    assert task.goal == "write-up" and task.tags == ["writing"]
+    assert len(inbox.items(content, "idea")) == 2  # one dropped, one skipped
+
+
+def test_tv_inbox_review_question_mark_lists_places(repo):
+    result = tv(repo, "inbox", "review", "--chores", input="g\n?\nthesis\n\nq\n")
+    assert "PhD thesis" in result.output
+    assert any(g.title == "Book the dentist" for g in Content.open(repo).goals())
+
+
+def test_promote_as_project_and_as_subtask(repo):
+    assert tv(repo, "todo", "promote", "dentist", "--as-project", "-p", "thesis").exit_code == 0
+    project = next(p for p in Content.open(repo).projects() if p.title == "Book the dentist")
+    assert project.parent == "thesis"
+    task = Content.open(repo).tasks()[0]
+    result = tv(repo, "idea", "promote", "ArviZ", "--subtask-of", task.id)
+    assert result.exit_code == 0, result.output
+    assert Content.open(repo).task(task.id).subtasks_total == task.subtasks_total + 1
