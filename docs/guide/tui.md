@@ -43,18 +43,21 @@ the preview.
 ## Keys
 
 Press `?` inside for the full list; the bottom line always shows the keys for
-where the cursor is. Five keys deliberately differ from vim and each is named
+where the cursor is. A few keys deliberately differ from vim and each is named
 in the help:
 
 | Key | What it does |
 |---|---|
-| `space` | done (goals, tasks, subprojects, todos, and a subtask in the preview; an idea: done already, removed) |
+| `space` | done (goals, tasks, subprojects, todos, and a subtask in the preview; an idea: done already, removed; a deliverable: pick its status) |
 | `x` | reopen (a subproject: active again) — vim's `x` deletes a character |
 | `s` | start: mark doing |
 | `w` | work on the task (`tv work`); on the task you are working on, pause |
 | `i` | jump to the next overdue, blocked or stale item (in the agenda) |
 | `W` | open the task in a terminal of its own (`tv work -t`; a subtask in the preview); closing it marks it done |
 | `n` | note in `## Updates` (on a project: a log line) |
+| `c` / `C` | capture an idea into the inbox / a chore into `todo.md`, from anywhere |
+| `R` | rename: a new title for a task, goal, project or deliverable (the id stays) |
+| `y` | copy the id, for a CLI command (an idea: `scope:N`; a todo: its number) — through the terminal (OSC 52); in tmux this needs `set -g set-clipboard on` |
 | `o` / `O` | add at the cursor's level / one level up (task, goal, project, …) |
 | `e` | open in `$EDITOR`; validated and committed when you return |
 | `t` | due date / deadline (`today`, `+3d`, `fri`, `2026-11-01`; `none` clears) |

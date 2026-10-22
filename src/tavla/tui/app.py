@@ -48,6 +48,7 @@ from tavla.core import (
 from tavla.core import focus as work
 from tavla.core.entities import (
     Deliverable,
+    DeliverableStatus,
     Goal,
     Priority,
     Project,
@@ -103,7 +104,7 @@ HINTS = {
     ("agenda", "preview"): "space tick  o subtask  e edit  esc back",
 }
 # Keys that work everywhere, added to the hint line while they fit.
-COMMON_HINTS = ("i alerts", "v mark", "/ filter", "f board", "@ people")
+COMMON_HINTS = ("c capture", "i alerts", "v mark", "/ filter", "f board", "@ people")
 MARK_HINT = "j k extend marks  space done all  V mark column  esc leave  "
 
 
@@ -305,6 +306,10 @@ class TavlaApp(App[None]):
         Binding("W", "terminal", show=False),
         Binding("i", "alert", show=False),
         Binding("n", "note", show=False),
+        Binding("c", "capture", show=False),
+        Binding("C", "capture_todo", show=False),
+        Binding("y", "copy", show=False),
+        Binding("R", "rename", show=False),
         Binding("o", "add_here", show=False),
         Binding("O", "add_above", show=False),
         Binding("e", "edit", show=False),
@@ -1158,6 +1163,10 @@ class TavlaApp(App[None]):
 
             self.write(tick)
             return
+        row = self.target()
+        if row is not None and row.kind == "deliverable" and not self.marked:
+            self._deliverable_status(row.ref)
+            return
         rows = [r for r in self.rows_under_cursor() if r.kind in _DONEABLE]
         if not rows:
             self.nothing("Nothing to mark done here")
@@ -1182,6 +1191,24 @@ class TavlaApp(App[None]):
             self.write(job)
 
         self.confirm_bulk("Mark done on", rows, bulk)
+
+    def _deliverable_status(self, deliverable: Deliverable) -> None:
+        """`space` on a deliverable: pick its status (drafting → published)."""
+        options = [
+            (s.value, f"{s.value}{'  (now)' if s == deliverable.status else ''}")
+            for s in DeliverableStatus
+        ]
+
+        def choose(status: str) -> None:
+            def job(c: Content) -> JobResult:
+                edited = ops.set_deliverable_fields(
+                    c, c.deliverable(deliverable.id), {"status": status}
+                )
+                return Outcome(f"{deliverable.id}: {status}" if edited else "No changes")
+
+            self.write(job)
+
+        self.pick(f"Status of {deliverable.id}", options, choose)
 
     def _toggle_one(self, row: Row, position: tuple[str, int] | None) -> None:
         def job(c: Content) -> JobResult:
@@ -1347,6 +1374,60 @@ class TavlaApp(App[None]):
             self.ask(f"Log line for {project_id}", log)
         else:
             self.nothing("Notes go on a task, goal or project")
+
+    def action_capture(self) -> None:
+        """`c`: an idea into the inbox, from anywhere (`tv capture`)."""
+        self._add_idea(None, "inbox")
+
+    def action_capture_todo(self) -> None:
+        """`C`: a chore into todo.md, from anywhere (`tv todo`)."""
+        self._add_todo()
+
+    def action_copy(self) -> None:
+        """`y`: copy what a CLI command takes for the row: an id, an idea's
+        ``scope:N``, a todo's number, or a subtask's text."""
+        row = self.target()
+        subtask = self.selected_subtask()
+        if subtask is not None and row is not None and row.kind == "task":
+            text = subtask.text
+        elif row is None or row.kind not in _COPYABLE:
+            self.nothing("Nothing to copy here")
+            return
+        elif row.kind == "idea":
+            text = row.ref.ref
+        elif row.kind == "todo":
+            text = str(row.ref.number)
+        else:
+            text = row.ref.id
+        self.copy_to_clipboard(text)
+        self.notify(f"Copied {text}", timeout=2)
+
+    def action_rename(self) -> None:
+        """`R`: change the title of a task, goal, project or deliverable (the
+        id stays)."""
+        row = self.target()
+        if row is None or row.kind not in _RENAMEABLE:
+            self.nothing("Select a task, goal, project or deliverable to rename")
+            return
+        kind, item_id = row.kind, row.ref.id
+
+        def rename(title: str) -> None:
+            def job(c: Content) -> JobResult:
+                if kind in ("project", "subproject"):
+                    done = ops.set_project_fields(
+                        c, c.project(item_id), {"title": ops.clean_title(title)}
+                    )
+                elif kind == "deliverable":
+                    done = ops.set_deliverable_fields(
+                        c, c.deliverable(item_id), {"title": ops.clean_title(title)}
+                    )
+                else:
+                    done = ops.set_fields(c, _item(c, kind, item_id), {}, title=title)
+                return Outcome(f"Renamed {item_id}" if done is not None else "No changes")
+
+            self.write(job)
+
+        self.ask(f"Rename {item_id}", rename, value=row.ref.title, hint="the id stays the same")
 
     def action_add_here(self) -> None:
         """`o`: a new item at the level the cursor is on. In the preview that is
@@ -1702,7 +1783,7 @@ class TavlaApp(App[None]):
         self.pick("Promote to a task in", model.task_homes(self.content), promote)
 
     def action_drop(self) -> None:
-        rows = [r for r in self.rows_under_cursor() if r.kind in _DONEABLE]
+        rows = [r for r in self.rows_under_cursor() if r.kind in (*_DONEABLE, "deliverable")]
         if not rows:
             self.nothing("Nothing to drop here")
             return
@@ -2332,6 +2413,8 @@ def _item(c: Content, kind: str, item_id: str) -> Task | Goal | Deliverable:
 
 _DONEABLE = ("task", "goal", "todo", "idea", "project", "subproject")
 _REOPENABLE = ("task", "goal", "project", "subproject")
+_RENAMEABLE = ("task", "goal", "project", "subproject", "deliverable")
+_COPYABLE = (*_RENAMEABLE, "idea", "todo")
 
 
 def _contents(c: Content, project: Project) -> str:

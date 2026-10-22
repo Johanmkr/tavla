@@ -816,6 +816,58 @@ def test_d_drops_a_subproject_with_what_is_in_it(demo_repo, git):
     assert not (demo_repo / "projects" / "thesis" / "subprojects" / "ablations").exists()
 
 
+def to_deliverable(app: TavlaApp) -> None:
+    to_thesis(app)
+    app.column("list").select_key("deliverables:thesis")
+    app.column("mid").focus()
+    app.column("mid").select_key("deliverable:icml-paper")
+
+
+def test_c_captures_an_idea_and_capital_c_a_chore_from_anywhere(demo_repo, git):
+    drive(demo_repo, "4", "c", "type:try warmup #speed", "enter")
+    assert last_commit(git, demo_repo) == "inbox: capture try warmup #speed"
+    texts = [r.idea.text for r in ideas.read(ideas.scope_of(Content.open(demo_repo), None))]
+    assert "try warmup #speed" in texts
+    drive(demo_repo, "C", "type:buy cables", "enter")
+    assert [t.text for t in todos.read(Content.open(demo_repo))][-1] == "buy cables"
+
+
+def test_y_copies_the_id(demo_repo):
+    copied = {}
+
+    def grab(app):
+        copied["text"] = app.clipboard
+
+    drive(demo_repo, lambda app: app.jump_to("run-baseline"), "y", grab)
+    assert copied["text"] == "run-baseline"
+
+
+def test_capital_r_renames_and_keeps_the_id(demo_repo, git):
+    drive(
+        demo_repo,
+        lambda app: app.jump_to("run-baseline"),
+        "R",
+        "ctrl+u",
+        "type:Run the baseline again",
+        "enter",
+    )
+    assert Content.open(demo_repo).task("run-baseline").title == "Run the baseline again"
+    assert last_commit(git, demo_repo) == "task: edit run-baseline (title)"
+
+
+def test_space_on_a_deliverable_picks_its_status(demo_repo, git):
+    def pick(app):
+        pick_option(app, "submitted")
+
+    drive(demo_repo, to_deliverable, "space", pick, "enter")
+    assert Content.open(demo_repo).deliverable("icml-paper").status == "submitted"
+
+
+def test_d_drops_a_deliverable(demo_repo, git):
+    drive(demo_repo, to_deliverable, "D", "y")
+    assert last_commit(git, demo_repo) == "deliverable: drop icml-paper"
+
+
 def test_tiny_layout_asks_for_a_bigger_window(demo_repo):
     seen = drive(demo_repo, size=(30, 10))
     assert "tiny" in seen["classes"]

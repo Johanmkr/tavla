@@ -101,6 +101,10 @@ once (see Upgrading).
 - `tavla ui` lists a project's subprojects at the top of its goal column:
   `enter` opens one, `h` goes back to the parent, and the breadcrumb shows
   the parents.
+- In `tavla ui`, `c` captures an idea into the inbox and `C` a chore into
+  `todo.md` from anywhere, `R` renames, and `y` copies the id under the
+  cursor (`scope:N` for an idea) for a CLI command. On a deliverable, `space`
+  picks its status and `D` drops it.
 - The selected row in `tavla ui` has a `▌` bar at its left edge: the accent
   colour in the focused column, dim in the others.
 
