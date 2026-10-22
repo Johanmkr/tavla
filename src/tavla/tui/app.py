@@ -609,6 +609,9 @@ class TavlaApp(App[None]):
         elif row is not None and row.kind == "deliverables":
             rows = model.deliverable_rows(self.content, Context("project", row.ref.id), today=today)
             title, empty = "Deliverables", "No deliverables. o to add one."
+        elif row is not None and row.kind == "subproject":
+            title = f"Subproject · {row.ref.id}"
+            empty = f"enter opens {row.ref.id} · h or esc there comes back to {row.ref.parent}"
         elif row is not None and row.kind == "loose":
             rows = model.task_rows(
                 self.content,
@@ -683,6 +686,10 @@ class TavlaApp(App[None]):
             project = self.project or row.ref
             return f"{project.id} · flow", model.project_detail(
                 self.content, project, width=width, today=today, open_only=not self.show_all
+            )
+        if row.kind == "subproject":
+            return f"{row.ref.id} · flow", model.project_detail(
+                self.content, row.ref, width=width, today=today, open_only=not self.show_all
             )
         if row.kind == "loose":
             project = self.project or row.ref
@@ -795,6 +802,7 @@ class TavlaApp(App[None]):
                 parts.append(getattr(row.ref, "id", None) or row.key.split(":", 1)[-1])
             return parts
         project = self.project
+        parts += self.project_ancestors()
         parts.append(project.id if project is not None else "no project")
         goal = self.selected_goal()
         if goal is not None and ("list" in self.hidden_columns() or self.list_source != "list"):
@@ -816,6 +824,9 @@ class TavlaApp(App[None]):
         if name == "mid" and self.scope != "project":
             name = "list"
         hints = HINTS.get((self.scope, name or "list"), "")
+        project = self.project
+        if name == "list" and self.scope == "project" and project and project.parent:
+            hints = f"h back to {project.parent}  " + hints
         if self.pending_key == "at":
             hints = "@a add  @d remove  @m mail  @l list  esc cancel"
         elif self.marked or self.visual:
@@ -860,6 +871,10 @@ class TavlaApp(App[None]):
         column = self.focused_column
         if column is None or not column.id:
             return
+        project = self.project
+        if column.id == "list" and self.scope == "project" and project and project.parent:
+            self.open_project(project.parent, select=f"sub:{project.id}")
+            return
         if column.id == "preview":
             source = self.list_source if self.column(self.list_source).display else "mid"
             self.column(source).focus()
@@ -873,6 +888,10 @@ class TavlaApp(App[None]):
     def action_go_right(self) -> None:
         column = self.focused_column
         if column is None or not column.id:
+            return
+        row = column.current
+        if column.id == "list" and row is not None and row.kind == "subproject":
+            self.open_project(row.ref.id)
             return
         order = self.visible_columns()
         if column.id in order and order.index(column.id) < len(order) - 1:
@@ -1930,15 +1949,30 @@ class TavlaApp(App[None]):
             for p in projects
         ]
 
-        def pick(project_id: str) -> None:
-            self.project_id = project_id
-            self._write_last_project(project_id)
-            if self.scope != "project":
-                self.scope = "project"
-            self.reload()
-            self.column("list").focus()
+        self.pick("Project", options, self.open_project)
 
-        self.pick("Project", options, pick)
+    def open_project(self, project_id: str, select: str | None = None) -> None:
+        """Show ``project_id`` in the project scope, the cursor on ``select``
+        (a row key) when given."""
+        self.project_id = project_id
+        self._write_last_project(project_id)
+        if self.scope != "project":
+            self.scope = "project"
+            self.set_layout(self.size.width, self.size.height)
+        if select is not None:
+            self.pending["list"] = select
+        self.column("list").highlighted = None  # land on the first row, not the old index
+        self.reload()
+        self.column("list").focus()
+
+    def project_ancestors(self) -> list[str]:
+        """The ids above the open project, outermost first."""
+        parents = {p.id: p.parent for p in self.content.projects()}
+        out: list[str] = []
+        project_id = self.project_id
+        while (project_id := parents.get(project_id or "")) and project_id not in out:
+            out.insert(0, project_id)
+        return out
 
     def action_help(self) -> None:
         self.push_screen(Help(self.here_hints))

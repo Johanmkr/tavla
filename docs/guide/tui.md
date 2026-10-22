@@ -11,7 +11,7 @@ The left column is the **scope** you are in, chosen with `1`-`4` (or `tab`):
 
 | Key | Scope | The left column holds |
 |---|---|---|
-| `1` | project | the project's goals, then `◆ deliverables` and `loose tasks` |
+| `1` | project | the project's `▸` subprojects, its goals, then `◆ deliverables` and `loose tasks` |
 | `2` | next | the `next` ranking, then goals with no tasks yet |
 | `3` | inbox | `IDEAS` (from `inbox.md`), then `CHORES` (from `todo.md`) |
 | `4` | agenda | the `status` report, today's chores, then everything dated |
@@ -27,6 +27,11 @@ stale projects), and when it last reloaded. The hint line below the columns
 says what the keys do where the cursor is.
 
 ## Moving around
+
+`enter` on a `▸` subproject opens it, and `h` (or `esc`) in its goal column
+goes back to the parent with the cursor on the subproject you came from. The
+breadcrumb shows the parents (`relu › nips`). A subproject's own goals and
+tasks live only in it, so a project made of subprojects lists just those.
 
 Vim motions mean exactly what they mean in vim: `h`/`l` and `←`/`→` move a
 column left or right, `j`/`k` and `↑`/`↓` a row, `g`/`G` the first or last

@@ -46,7 +46,7 @@ PROJECT_MARKS = {
 @dataclass
 class Row:
     key: str
-    kind: str  # working | summary | todo | project | goal | loose | task | idea | deliverable
+    kind: str  # working | summary | todo | project | subproject | goal | loose | task | idea | deliverable
     prompt: RenderableType
     ref: Any = None
     disabled: bool = False
@@ -203,12 +203,36 @@ def goal_rows(
     return rows
 
 
+def subproject_rows(content: Content, project: Project) -> list[Row]:
+    """``▸`` rows for a project's direct subprojects, with their open tasks
+    (their own subprojects' included): `enter` opens one."""
+    rows = []
+    for child in content.projects():
+        if child.parent != project.id:
+            continue
+        open_tasks = [t for t in content.tasks(child) if t.status != TaskStatus.DONE]
+        mark = PROJECT_MARKS[child.status]
+        left = Text.assemble("▸ ", child.title, (f" {mark}" if mark else "", "dim"))
+        rows.append(
+            Row(
+                f"sub:{child.id}",
+                "subproject",
+                two_columns(left, dim(str(len(open_tasks)))),
+                ref=child,
+                search=f"{child.id} {child.title}",
+            )
+        )
+    return rows
+
+
 def goal_column_rows(
     content: Content, project: Project, *, show_all: bool = False, today: dt.date
 ) -> list[Row]:
-    """The goal column of a project: its goals, then the project's
-    deliverables and the tasks without a goal (decision 15)."""
-    rows = goal_rows(content, project, show_all=show_all, today=today)
+    """The goal column of a project: its subprojects, its goals, then the
+    project's deliverables and the tasks without a goal (decision 15)."""
+    rows = subproject_rows(content, project) + goal_rows(
+        content, project, show_all=show_all, today=today
+    )
     for row in rows:
         row.column = "goal"
     deliverables = deliverable_rows(content, Context("project", project.id), today=today)

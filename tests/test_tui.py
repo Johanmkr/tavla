@@ -618,6 +618,20 @@ def test_selected_row_has_a_bar_bright_in_the_focused_column(demo_repo):
     assert seen["list colour"] != seen["mid colour"]  # dim where focus isn't
 
 
+def test_subprojects_are_listed_and_open_with_enter(demo_repo):
+    seen = drive(demo_repo, to_thesis)
+    assert seen["rows"]["list"][0] == "sub:ablations"
+
+    seen = drive(demo_repo, to_thesis, "enter")
+    assert seen["project"] == "ablations"
+    assert seen["breadcrumb"] == ["thesis", "ablations"]
+    assert Text.from_ansi(seen["hints"]).plain.strip().startswith("h back to thesis")
+
+    seen = drive(demo_repo, to_thesis, "enter", "h")
+    assert seen["project"] == "thesis"
+    assert seen["current"]["list"] == "sub:ablations"
+
+
 def test_tiny_layout_asks_for_a_bigger_window(demo_repo):
     seen = drive(demo_repo, size=(30, 10))
     assert "tiny" in seen["classes"]
